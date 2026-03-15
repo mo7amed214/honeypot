@@ -1,64 +1,42 @@
+version: "3.9"
+
 services:
-  opcua_server:
-    build:
-      context: ./opcua_server
-    container_name: opcua_server
-    environment:
-      - NAMESPACE=http://manufacturing.example/opcua
-      - OPCUA_ENDPOINT=opc.tcp://0.0.0.0:4840/freeopcua/server/
-    ports:
-      - "4840:4840"
-    restart: unless-stopped
-
-  historian_init:
-    build:
-      context: ./historian_service
-    container_name: historian_init
-    command: ["python", "init_db.py"]
-    environment:
-      - DB_PATH=/data/historian.db
-    volumes:
-      - historian_data:/data
-
   historian_web:
     build:
       context: ./historian_service
+      dockerfile: Dockerfile
     container_name: historian_web
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]
+    command: ["/app/docker-entrypoint.sh"]
     environment:
-      - DB_PATH=/data/historian.db
-      - SPLUNK_HEC_URL=https://host.docker.internal:8088/services/collector/event
-      - SPLUNK_HEC_TOKEN=020a086f-3d05-441a-9cfc-44bdf37014ed
-    volumes:
-      - historian_data:/data
-    depends_on:
-      historian_init:
-        condition: service_completed_successfully
+      DB_PATH: /data/historian.db
+      EVENT_LOG_PATH: /var/log/historian/events.jsonl
+      HISTORIAN_USERNAME: operator
+      HISTORIAN_PASSWORD: operator123
+      SERVER_BASE: http://localhost:5000
     ports:
       - "5000:5000"
+    volumes:
+      - historian_data:/data
+      - historian_logs:/var/log/historian
     restart: unless-stopped
 
   historian_ingest:
     build:
       context: ./historian_service
+      dockerfile: Dockerfile
     container_name: historian_ingest
     command: ["python", "opcua_ingest.py"]
     environment:
-      - DB_PATH=/data/historian.db
-      - OPCUA_URL=opc.tcp://opcua_server:4840/freeopcua/server/
-      - NAMESPACE=http://manufacturing.example/opcua
-      - POLL_INTERVAL_SECONDS=3
-      # Splunk HEC — host.docker.internal reaches Splunk running on your laptop
-      - SPLUNK_HEC_URL=https://host.docker.internal:8088/services/collector/event
-      - SPLUNK_HEC_TOKEN=020a086f-3d05-441a-9cfc-44bdf37014ed
+      DB_PATH: /data/historian.db
+      EVENT_LOG_PATH: /var/log/historian/events.jsonl
+      OPCUA_URL: opc.tcp://host.docker.internal:4840/freeopcua/server/
+      NAMESPACE: http://manufacturing.example/opcua
+      POLL_INTERVAL_SECONDS: "3.0"
     volumes:
       - historian_data:/data
-    depends_on:
-      historian_init:
-        condition: service_completed_successfully
-      opcua_server:
-        condition: service_started
+      - historian_logs:/var/log/historian
     restart: unless-stopped
 
 volumes:
   historian_data:
+  historian_logs:
