@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% if tag %}{{ tag }} – {% endif %}History · Manufacturing Historian Portal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 48px 24px 40px;
+      background: #0d1117;
+      background-image:
+        linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #c9d1d9;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      padding: 40px 48px;
+      width: 100%;
+      max-width: 760px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+
+    /* breadcrumb */
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .8rem;
+      color: #8b949e;
+      margin-bottom: 28px;
+    }
+    .breadcrumb a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb .sep { color: #484f58; }
+
+    .badge {
+      display: inline-block;
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #58a6ff;
+      background: rgba(88,166,255,.1);
+      border: 1px solid rgba(88,166,255,.25);
+      border-radius: 20px;
+      padding: 3px 12px;
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #e6edf3;
+      margin-bottom: 6px;
+      word-break: break-all;
+    }
+
+    .meta {
+      font-size: .85rem;
+      color: #8b949e;
+      margin-bottom: 28px;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #21262d;
+      margin-bottom: 24px;
+    }
+
+    /* error / empty states */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: .9rem;
+      margin-bottom: 20px;
+    }
+    .alert-error {
+      background: rgba(248,81,73,.1);
+      border: 1px solid rgba(248,81,73,.3);
+      color: #f85149;
+    }
+    .alert-empty {
+      background: rgba(139,148,158,.08);
+      border: 1px solid #30363d;
+      color: #8b949e;
+    }
+
+    /* table */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+    }
+
+    thead tr {
+      background: #1c2128;
+    }
+
+    th {
+      padding: 11px 16px;
+      text-align: left;
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: #8b949e;
+      border-bottom: 1px solid #30363d;
+    }
+
+    td {
+      padding: 11px 16px;
+      border-bottom: 1px solid #21262d;
+      color: #c9d1d9;
+      font-variant-numeric: tabular-nums;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    tbody tr:hover td {
+      background: rgba(88,166,255,.05);
+    }
+
+    .mono { font-family: 'Consolas', 'Courier New', monospace; font-size: .88rem; }
+
+    /* metadata panel */
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .meta-cell {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 14px;
+    }
+    .meta-cell-label {
+      font-size: .68rem;
+      font-weight: 600;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: #484f58;
+      margin-bottom: 4px;
+    }
+    .meta-cell-value {
+      font-size: .88rem;
+      color: #e6edf3;
+    }
+    .status-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #3fb950;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    .unit-inline {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: .82rem;
+      color: #f0883e;
+    }
+
+    .row-count {
+      margin-top: 12px;
+      font-size: .8rem;
+      color: #484f58;
+      text-align: right;
+    }
+
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #3fb950;
+      background: rgba(63,185,80,.08);
+      border: 1px solid rgba(63,185,80,.25);
+      border-radius: 20px;
+      padding: 3px 10px;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+    .live-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #3fb950;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: .2; }
+    }
+    .new-row td {
+      animation: flashrow .8s ease-out;
+    }
+    @keyframes flashrow {
+      0%   { background: rgba(63,185,80,.18); }
+      100% { background: transparent; }
+    }
+
+    footer {
+      margin-top: 28px;
+      font-size: .78rem;
+      color: #484f58;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+
+    <div class="breadcrumb">
+      <a href="/portal">Home</a>
+      <span class="sep">›</span>
+      <a href="/portal/tags">Tags</a>
+      <span class="sep">›</span>
+      <span>{{ tag if tag else "History Query" }}</span>
+    </div>
+
+    <div class="badge">OT Level 3 &mdash; Historian</div>
+
+    {% if tag and values %}
+      <h1>Historical Telemetry Results <span class="live-indicator"><span class="live-dot"></span>Live</span></h1>
+      <p class="meta">Tag: <strong style="color:#e6edf3;">{{ tag }}</strong> &mdash; <span id="row-count">{{ values | length }}</span> data point<span id="row-count-s">{{ 's' if values | length != 1 }}</span> returned</p>
+    {% elif tag %}
+      <h1>Historical Telemetry Results</h1>
+      <p class="meta">Tag: <strong style="color:#e6edf3;">{{ tag }}</strong></p>
+    {% else %}
+      <h1>Historical Telemetry Results</h1>
+      <p class="meta">No tag specified.</p>
+    {% endif %}
+
+    {% if meta %}
+    <div class="meta-grid">
+      <div class="meta-cell">
+        <div class="meta-cell-label">Process Area</div>
+        <div class="meta-cell-value">{{ meta.area }}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-cell-label">Unit</div>
+        <div class="meta-cell-value unit-inline">{{ meta.unit }}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-cell-label">Equipment</div>
+        <div class="meta-cell-value">{{ meta.equipment }}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-cell-label">Description</div>
+        <div class="meta-cell-value">{{ meta.description }}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-cell-label">Status</div>
+        <div class="meta-cell-value"><span class="status-dot"></span>{{ meta.status }}</div>
+      </div>
+    </div>
+    {% endif %}
+
+    <hr class="divider" />
+
+    {% if error %}
+      <div class="alert alert-error">{{ error }}</div>
+    {% elif values %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Timestamp</th>
+              <th>Value</th>
+              <th>Quality</th>
+            </tr>
+          </thead>
+          <tbody id="telemetry-body">
+            {% for row in values %}
+            <tr>
+              <td class="mono" style="color:#484f58;">{{ loop.index }}</td>
+              <td class="mono">{{ row.timestamp }}</td>
+              <td class="mono">{{ row.value }}</td>
+              <td>
+                {% if row.quality == 'Good' %}
+                  <span style="color:#3fb950;font-size:.8rem;">&#9679; Good</span>
+                {% elif row.quality == 'Uncertain' %}
+                  <span style="color:#d29922;font-size:.8rem;">&#9679; Uncertain</span>
+                {% else %}
+                  <span style="color:#f85149;font-size:.8rem;">&#9679; Bad</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="row-count" id="row-count-footer">{{ values | length }} data point{{ 's' if values | length != 1 }} returned</p>
+    {% elif tag %}
+      <div class="alert alert-empty">No records found for tag <strong>{{ tag }}</strong>.</div>
+    {% endif %}
+
+  </div>
+
+  <footer>Manufacturing Historian Portal &mdash; Internal Use Only</footer>
+
+{% if tag and values %}
+<script>
+(function () {
+  const TAG   = {{ tag | tojson }};
+  const tbody = document.getElementById('telemetry-body');
+  if (!tbody) return;
+
+  // seed latest timestamp from server-rendered first row
+  const firstCell = tbody.querySelector('tr td:nth-child(2)');
+  let latestTs = firstCell ? firstCell.textContent.trim() : '';
+  let totalRows = parseInt(document.getElementById('row-count').textContent, 10) || 0;
+
+  function qualityHtml(q) {
+    if (q === 'Good')      return '<span style="color:#3fb950;font-size:.8rem;">&#9679; Good</span>';
+    if (q === 'Uncertain') return '<span style="color:#d29922;font-size:.8rem;">&#9679; Uncertain</span>';
+    return '<span style="color:#f85149;font-size:.8rem;">&#9679; Bad</span>';
+  }
+
+  function poll() {
+    fetch('/portal/history/live?tag=' + encodeURIComponent(TAG) + '&since=' + encodeURIComponent(latestTs))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.rows || data.rows.length === 0) return;
+        // rows come back newest-first; reverse so we prepend in correct order
+        const sorted = data.rows.slice().reverse();
+        sorted.forEach(row => {
+          totalRows++;
+          const tr = document.createElement('tr');
+          tr.className = 'new-row';
+          tr.innerHTML =
+            '<td class="mono" style="color:#484f58;">' + totalRows + '</td>' +
+            '<td class="mono">' + row.timestamp + '</td>' +
+            '<td class="mono">' + row.value + '</td>' +
+            '<td>' + qualityHtml(row.quality) + '</td>';
+          tbody.insertBefore(tr, tbody.firstChild);
+        });
+        // update latest known timestamp
+        latestTs = data.rows[0].timestamp;
+        // update counters
+        document.getElementById('row-count').textContent = totalRows;
+        document.getElementById('row-count-s').textContent = totalRows !== 1 ? 's' : '';
+        const footer = document.getElementById('row-count-footer');
+        if (footer) footer.textContent = totalRows + ' data point' + (totalRows !== 1 ? 's' : '') + ' returned';
+      })
+      .catch(() => {});
+  }
+
+  setInterval(poll, 3000);
+})();
+</script>
+{% endif %}
+
+</body>
+</html>

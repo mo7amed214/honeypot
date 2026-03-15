@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.db-journal
+*.log
+.git/
+.gitignore
+*.md
+DOCKER_MITM_NOTES.md

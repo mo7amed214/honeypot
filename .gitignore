@@ -1,0 +1,28 @@
+# Python environments
+.venv/
+venv/
+**/.venv/
+**/venv/
+
+# Python cache/artifacts
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs and runtime files
+*.log
+build.log
+
+# Local databases and seed sentinels
+*.db
+*.sqlite
+*.sqlite3
+.db_seeded
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In – Manufacturing Historian Portal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #0d1117;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #c9d1d9;
+      padding: 24px;
+    }
+
+    .login-wrap {
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+
+    /* Logo / brand */
+    .brand {
+      text-align: center;
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #1f6feb, #388bfd);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brand-icon svg { display: block; }
+
+    .brand-name {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #e6edf3;
+      letter-spacing: -.01em;
+    }
+
+    .brand-sub {
+      font-size: .78rem;
+      color: #8b949e;
+      letter-spacing: .02em;
+    }
+
+    /* Card */
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      padding: 32px 36px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #e6edf3;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    label {
+      display: block;
+      font-size: .8rem;
+      font-weight: 600;
+      color: #8b949e;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      display: block;
+      width: 100%;
+      padding: 9px 12px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e6edf3;
+      font-size: .93rem;
+      outline: none;
+      transition: border-color .15s;
+      margin-bottom: 16px;
+    }
+    input:focus { border-color: #58a6ff; }
+    input::placeholder { color: #484f58; }
+
+    button[type="submit"] {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      background: #1f6feb;
+      border: 1px solid #388bfd;
+      border-radius: 6px;
+      color: #fff;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: background .15s;
+    }
+    button[type="submit"]:hover { background: #388bfd; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #21262d;
+      margin: 20px 0;
+    }
+
+    .hint {
+      font-size: .75rem;
+      color: #484f58;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* Warning banner */
+    .warning {
+      width: 100%;
+      background: rgba(210,153,34,.08);
+      border: 1px solid rgba(210,153,34,.25);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: .76rem;
+      color: #d29922;
+      line-height: 1.55;
+      text-align: center;
+    }
+
+    footer {
+      font-size: .72rem;
+      color: #30363d;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-wrap">
+
+    <div class="brand">
+      <div class="brand-logo">
+        <div class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <rect x="3" y="3" width="7" height="7" rx="1.5" fill="white" opacity=".9"/>
+            <rect x="12" y="3" width="7" height="7" rx="1.5" fill="white" opacity=".6"/>
+            <rect x="3" y="12" width="7" height="7" rx="1.5" fill="white" opacity=".6"/>
+            <rect x="12" y="12" width="7" height="7" rx="1.5" fill="white" opacity=".9"/>
+          </svg>
+        </div>
+        <span class="brand-name">PI Web Portal</span>
+      </div>
+      <div class="brand-sub">OSIsoft PI Web API 2023 &nbsp;|&nbsp; v1.13.0.6518</div>
+    </div>
+
+    <div class="card">
+      <p class="card-title">Sign in to continue</p>
+      {% if error %}
+      <p style="background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.35);color:#f85149;padding:8px 10px;border-radius:6px;font-size:.82rem;margin-bottom:12px;">
+        {{ error }}
+      </p>
+      {% endif %}
+      <form method="post" action="/login" autocomplete="off">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username"
+               placeholder="e.g. piadmin" autofocus />
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password"
+               placeholder="Password" />
+
+        <button type="submit">Sign In</button>
+      </form>
+
+      <hr class="divider" />
+      <p class="hint">
+        Contact your system administrator if you have forgotten<br>
+        your credentials &mdash; ext. 4400
+      </p>
+    </div>
+
+    <div class="warning">
+      &#9888;&nbsp; This system is for <strong>authorized users only</strong>.
+      Unauthorized access is a violation of company policy and may be
+      subject to criminal prosecution.
+    </div>
+
+    <footer>PLANT-PI-01 &nbsp;&bull;&nbsp; Manufacturing Historian &nbsp;&bull;&nbsp; OT Zone L3</footer>
+
+  </div>
+
+</body>
+</html>

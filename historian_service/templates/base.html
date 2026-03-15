@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Manufacturing Historian Portal{% endblock %}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; color: #222; }
+        header { background: #1a3a5c; color: #fff; padding: 16px 24px; }
+        header a { color: #aad4f5; text-decoration: none; margin-right: 16px; }
+        header a:hover { text-decoration: underline; }
+        main { max-width: 900px; margin: 32px auto; background: #fff; padding: 24px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #ddd; }
+        th { background: #1a3a5c; color: #fff; }
+        tr:hover td { background: #f0f7ff; }
+        .tag-link { color: #1a3a5c; text-decoration: none; }
+        .tag-link:hover { text-decoration: underline; }
+        input[type=text] { padding: 8px; width: 280px; border: 1px solid #aaa; border-radius: 4px; font-size: 1rem; }
+        button { padding: 8px 18px; background: #1a3a5c; color: #fff; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; margin-left: 8px; }
+        button:hover { background: #25538a; }
+        .error { color: #c0392b; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>Manufacturing Historian Portal</strong>
+        &nbsp;&nbsp;
+        <a href="/portal">Home</a>
+        <a href="/portal/overview">Overview</a>
+        <a href="/portal/tags">Tags</a>
+        <a href="/portal/history">History Query</a>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
