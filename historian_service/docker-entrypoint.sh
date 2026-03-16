@@ -15,10 +15,11 @@ if [ "$LOG_DIR" != "." ]; then
 fi
 
 if [ ! -f "$DB_PATH" ]; then
-  echo "[startup] database missing at $DB_PATH, running init_db.py"
-  python init_db.py
+  echo "[startup] database missing at $DB_PATH, initializing"
 else
-  echo "[startup] using existing database at $DB_PATH"
+  echo "[startup] database found at $DB_PATH, reconciling canonical schema"
 fi
+
+python init_db.py
 
 exec uvicorn main:app --host 0.0.0.0 --port 5000

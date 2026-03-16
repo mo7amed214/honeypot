@@ -18,9 +18,7 @@ DB_PATH = os.getenv("DB_PATH", "historian.db")
 OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840")
 NAMESPACE = os.getenv("NAMESPACE", "http://manufacturing.example/opcua")
 POLL_INTERVAL_SECONDS = float(os.getenv("POLL_INTERVAL_SECONDS", "3.0"))
-INGEST_PROFILE = os.getenv("INGEST_PROFILE", "legacy15")
-
-LEGACY_TAGS = {
+TAGS = {
     "line1_conveyor_speed_mpm": {"path": "line1_conveyor_speed_mpm", "min": 0.0, "max": 30.0, "max_step": 4.0},
     "station1_motor_rpm": {"path": "station1_motor_rpm", "min": 0.0, "max": 1520.0, "max_step": 60.0},
     "robot_arm_3_cycle_count": {"path": "robot_arm_3_cycle_count", "min": 0.0, "max": 1e7, "max_step": 100.0},
@@ -37,29 +35,6 @@ LEGACY_TAGS = {
     "plant_power_kw": {"path": "plant_power_kw", "min": 80.0, "max": 280.0, "max_step": 20.0},
     "cooling_water_temp_c": {"path": "cooling_water_temp_c", "min": 10.0, "max": 40.0, "max_step": 2.0},
 }
-
-MINIMAL6_TAGS = {
-    "LineRunning": {"path": "LineRunning", "min": 0.0, "max": 1.0, "max_step": 1.0},
-    "ConveyorSpeed": {"path": "ConveyorSpeed", "min": 0.0, "max": 2.0, "max_step": 0.35},
-    "Station1Temperature": {"path": "Station1Temperature", "min": 20.0, "max": 90.0, "max_step": 2.5},
-    "BatchCount": {"path": "BatchCount", "min": 0.0, "max": 1e9, "max_step": 20.0},
-    "RejectCount": {"path": "RejectCount", "min": 0.0, "max": 1e7, "max_step": 5.0},
-    "EmergencyStop": {"path": "EmergencyStop", "min": 0.0, "max": 1.0, "max_step": 1.0},
-}
-
-TAG_PROFILES = {
-    "legacy15": LEGACY_TAGS,
-    "minimal6": MINIMAL6_TAGS,
-}
-
-TAGS = TAG_PROFILES.get(INGEST_PROFILE, LEGACY_TAGS)
-
-
-def pick_value(values: Dict[str, float], *candidates: str, default: float = 0.0) -> float:
-    for candidate in candidates:
-        if candidate in values:
-            return values[candidate]
-    return default
 
 
 def utc_now_iso() -> str:
@@ -98,9 +73,9 @@ def assess_quality(tag: str, value: float, previous: Optional[float]) -> str:
 
 
 def process_state(current: Dict[str, float], previous: Dict[str, float]) -> str:
-    speed = pick_value(current, "line1_conveyor_speed_mpm", "ConveyorSpeed")
-    cycles = pick_value(current, "robot_arm_3_cycle_count", "BatchCount")
-    prev_cycles = pick_value(previous, "robot_arm_3_cycle_count", "BatchCount", default=cycles)
+    speed = current["line1_conveyor_speed_mpm"]
+    cycles = current["robot_arm_3_cycle_count"]
+    prev_cycles = previous.get("robot_arm_3_cycle_count", cycles)
     if speed < 0.5 and cycles <= prev_cycles:
         return "IDLE"
     if speed > 0.5 and cycles > prev_cycles:
@@ -113,25 +88,17 @@ def detect_mitm_signals(
     previous: Dict[str, float],
     unchanged_counts: Dict[str, int],
 ) -> Optional[Tuple[str, str, str, dict]]:
-    speed_key = "line1_conveyor_speed_mpm" if "line1_conveyor_speed_mpm" in current else "ConveyorSpeed"
-    temp_key = "weld_cell_temperature_c" if "weld_cell_temperature_c" in current else "Station1Temperature"
-    count_key = "robot_arm_3_cycle_count" if "robot_arm_3_cycle_count" in current else "BatchCount"
+    speed = current["line1_conveyor_speed_mpm"]
+    prev_speed = previous.get("line1_conveyor_speed_mpm", speed)
+    temp = current["weld_cell_temperature_c"]
+    prev_temp = previous.get("weld_cell_temperature_c", temp)
+    cycles = current["robot_arm_3_cycle_count"]
+    prev_cycles = previous.get("robot_arm_3_cycle_count", cycles)
 
-    if speed_key not in current or temp_key not in current or count_key not in current:
-        return None
-
-    speed = current[speed_key]
-    prev_speed = previous.get(speed_key, speed)
-    temp = current[temp_key]
-    prev_temp = previous.get(temp_key, temp)
-    cycles = current[count_key]
-    prev_cycles = previous.get(count_key, cycles)
-
-    # The physics model restarts legacy15 line speed from 0.0 to a stable floor
+    # The physics model restarts line speed from 0.0 to a stable floor
     # near 12.5 m/min, which should not be treated as tampering.
     is_expected_legacy_restart = (
-        speed_key == "line1_conveyor_speed_mpm"
-        and prev_speed < 0.5
+        prev_speed < 0.5
         and speed >= 11.5
         and cycles > prev_cycles
     )
@@ -144,12 +111,12 @@ def detect_mitm_signals(
             {"prev": prev_speed, "curr": speed, "delta": round(speed - prev_speed, 3)},
         )
 
-    if speed > 0.8 and unchanged_counts.get(temp_key, 0) >= 5:
+    if speed > 0.8 and unchanged_counts.get("weld_cell_temperature_c", 0) >= 5:
         return (
             "stuck_value_pattern",
             "medium",
             "Temperature remained static while line appears active",
-            {"temperature": temp, "streak": unchanged_counts[temp_key]},
+            {"temperature": temp, "streak": unchanged_counts["weld_cell_temperature_c"]},
         )
 
     if speed > 1.1 and cycles <= prev_cycles and abs(temp - prev_temp) > 0.6:
@@ -176,7 +143,7 @@ def write_batch(conn: sqlite3.Connection, rows: list[tuple]):
 
 async def main():
     print(f"[ingest] connecting to {OPCUA_URL}")
-    print(f"[ingest] profile={INGEST_PROFILE} namespace={NAMESPACE}")
+    print(f"[ingest] profile=canonical15 namespace={NAMESPACE}")
     print(f"[ingest] DB_PATH={DB_PATH} tags={len(TAGS)}")
     emit_event(event_type="ingest_start", route="opcua_ingest", status="starting")
 
@@ -191,19 +158,11 @@ async def main():
     while True:
         try:
             async with Client(url=OPCUA_URL) as client:
-                try:
-                    assembly_node = client.get_node("ns=1;s=AssemblyLine")
-                    await assembly_node.read_browse_name()
-                    node_map = {tag: client.get_node(f"ns=1;s={cfg['path']}") for tag, cfg in TAGS.items()}
-                    for node in node_map.values():
-                        await node.read_browse_name()
-                except Exception as direct_exc:
-                    print(f"[ingest] direct node-id mapping failed: {direct_exc}")
-                    nsidx = await client.get_namespace_index(NAMESPACE)
-                    node_map = {
-                        tag: await client.nodes.root.get_child(["0:Objects", f"{nsidx}:AssemblyLine", f"{nsidx}:{cfg['path']}"])
-                        for tag, cfg in TAGS.items()
-                    }
+                nsidx = await client.get_namespace_index(NAMESPACE)
+                node_map = {
+                    tag: await client.nodes.root.get_child(["0:Objects", f"{nsidx}:AssemblyLine", f"{nsidx}:{cfg['path']}"])
+                    for tag, cfg in TAGS.items()
+                }
                 print(f"[ingest] connected - {len(node_map)} tags mapped")
                 emit_event(event_type="ingest_connection", route="opcua_ingest", status="connected")
                 retry_delay = 2.0
@@ -233,19 +192,18 @@ async def main():
                     event_msg = ""
                     if signal:
                         detector, severity, _, details = signal
-                        alert_tag = "line1_conveyor_speed_mpm" if "line1_conveyor_speed_mpm" in current_values else "ConveyorSpeed"
                         emit_event(
                             event_type="ingest_anomaly",
                             route="opcua_ingest",
-                            tag=alert_tag,
+                            tag="line1_conveyor_speed_mpm",
                             status=severity,
                             extra={"detector": detector, **details},
                         )
                         event_msg = f" | alert={detector} severity={severity}"
 
-                    speed_val = pick_value(current_values, "line1_conveyor_speed_mpm", "ConveyorSpeed")
-                    temp_val = pick_value(current_values, "weld_cell_temperature_c", "Station1Temperature")
-                    cycles_val = pick_value(current_values, "robot_arm_3_cycle_count", "BatchCount")
+                    speed_val = current_values["line1_conveyor_speed_mpm"]
+                    temp_val = current_values["weld_cell_temperature_c"]
+                    cycles_val = current_values["robot_arm_3_cycle_count"]
 
                     print(
                         f"[{ts}] poll={poll_count} state={state} speed={speed_val:.2f} "

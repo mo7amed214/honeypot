@@ -29,7 +29,6 @@ services:
       EVENT_LOG_PATH: /var/log/historian/ingest.jsonl
       OPCUA_URL: opc.tcp://host.docker.internal:4840
       NAMESPACE: http://manufacturing.example/opcua
-      INGEST_PROFILE: legacy15
       POLL_INTERVAL_SECONDS: "1.0"
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -10,6 +10,24 @@ DB_PATH        = os.getenv("DB_PATH", "historian.db")
 SENTINEL       = os.path.join(os.path.dirname(DB_PATH), ".db_seeded")
 FORCE_RESEED   = os.getenv("FORCE_RESEED", "0") == "1"
 
+CANONICAL_TAGS = [
+    "line1_conveyor_speed_mpm",
+    "station1_motor_rpm",
+    "robot_arm_3_cycle_count",
+    "line1_vibration_mm_s",
+    "station1_part_count",
+    "weld_cell_temperature_c",
+    "weld_arc_voltage_v",
+    "weld_wire_feed_speed_mmin",
+    "station2_fault_count",
+    "packaging_rate_units_min",
+    "pkg_seal_temp_c",
+    "pkg_reject_count",
+    "air_pressure_bar",
+    "plant_power_kw",
+    "cooling_water_temp_c",
+]
+
 def make_webid(tag: str) -> str:
     b64 = base64.b64encode(f"{PI_SERVER_NAME}\\{tag}".encode()).decode().replace("=", "")
     return "F1DP" + b64[:28]
@@ -51,46 +69,51 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 )""")
 conn.commit()
 
-# Sentinel: only do the heavy seed once (or if FORCE_RESEED=1)
-if os.path.exists(SENTINEL) and not FORCE_RESEED:
-    print("historian.db already seeded (delete /data/.db_seeded or set FORCE_RESEED=1 to re-seed)")
-    conn.close()
-    exit(0)
-
-# Clear and re-seed process tables (DML — safe with concurrent readers via WAL)
-# login_attempts is intentionally NOT cleared — captured credentials must survive restarts
-cursor.execute("DELETE FROM telemetry")
-cursor.execute("DELETE FROM tag_metadata")
-
 # --- tag definitions ---
 _base_meta = [
     # Assembly Line 1
     ("line1_conveyor_speed_mpm",     "m/min",     "Assembly Line 1",   "Main belt conveyor speed",                  "Conveyor Drive VFD-01",   "ONLINE"),
-    ("station1_motor_rpm",           "RPM",       "Assembly Line 1",   "Station 1 drive motor speed",               "Motor MCB-ST1",           "ONLINE"),
+    ("station1_motor_rpm",           "rpm",       "Assembly Line 1",   "Station 1 drive motor speed",               "Motor MCB-ST1",           "ONLINE"),
     ("robot_arm_3_cycle_count",      "cycles",    "Assembly Line 1",   "Robot arm 3 cumulative cycle counter",       "Robot RA-3",              "ONLINE"),
     ("line1_vibration_mm_s",         "mm/s",      "Assembly Line 1",   "Line 1 main frame vibration level",          "Vibration Sensor VS-L1",  "ONLINE"),
-    ("station1_part_count",          "units",     "Assembly Line 1",   "Parts processed at station 1",               "Counter CT-ST1",          "ONLINE"),
+    ("station1_part_count",          "parts",     "Assembly Line 1",   "Parts processed at station 1",               "Counter CT-ST1",          "ONLINE"),
     # Welding Cell
-    ("weld_cell_temperature_c",      "\u00b0C",   "Welding Cell",      "Welding cell ambient temperature",           "Temp Sensor TS-WC1",      "ONLINE"),
+    ("weld_cell_temperature_c",      "degC",      "Welding Cell",      "Welding cell ambient temperature",           "Temp Sensor TS-WC1",      "ONLINE"),
     ("weld_arc_voltage_v",           "V",         "Welding Cell",      "Welding arc voltage",                        "Welder WLD-01",           "ONLINE"),
     ("weld_wire_feed_speed_mmin",    "m/min",     "Welding Cell",      "Wire feed speed",                            "Wire Feeder WF-01",       "ONLINE"),
     ("station2_fault_count",         "faults",    "Welding Cell",      "Cumulative fault counter",                   "PLC PLC-WC",              "ONLINE"),
     # Packaging Station
     ("packaging_rate_units_min",     "units/min", "Packaging Station", "Packaging throughput rate",                  "Packaging Machine PKG-01","ONLINE"),
-    ("pkg_seal_temp_c",              "\u00b0C",   "Packaging Station", "Heat seal bar temperature",                  "Sealer SB-01",            "ONLINE"),
+    ("pkg_seal_temp_c",              "degC",      "Packaging Station", "Heat seal bar temperature",                  "Sealer SB-01",            "ONLINE"),
     ("pkg_reject_count",             "units",     "Packaging Station", "Rejected packages cumulative counter",        "Vision System VS-PKG",    "ONLINE"),
     # Utilities
     ("air_pressure_bar",             "bar",       "Utilities",         "Compressed air header pressure",             "Compressor COMP-01",      "ONLINE"),
     ("plant_power_kw",               "kW",        "Utilities",         "Total plant power draw",                     "Energy Meter EM-MAIN",    "ONLINE"),
-    ("cooling_water_temp_c",         "\u00b0C",   "Utilities",         "Cooling water return temperature",           "Cooling Tower CT-01",     "ONLINE"),
+    ("cooling_water_temp_c",         "degC",      "Utilities",         "Cooling water return temperature",           "Cooling Tower CT-01",     "ONLINE"),
 ]
 
 metadata = [row + (make_webid(row[0]), f"\\\\{PI_SERVER_NAME}\\{row[0]}") for row in _base_meta]
 
+# Reconcile metadata on every startup so historian UI/API stay aligned to the canonical 15-tag model.
 cursor.executemany(
-    "INSERT INTO tag_metadata (tag, unit, area, description, equipment, status, webid, pi_path) VALUES (?,?,?,?,?,?,?,?)",
+    "INSERT OR REPLACE INTO tag_metadata (tag, unit, area, description, equipment, status, webid, pi_path) VALUES (?,?,?,?,?,?,?,?)",
     metadata
 )
+
+placeholders = ",".join("?" for _ in CANONICAL_TAGS)
+cursor.execute(f"DELETE FROM tag_metadata WHERE tag NOT IN ({placeholders})", CANONICAL_TAGS)
+cursor.execute(f"DELETE FROM telemetry WHERE tag NOT IN ({placeholders})", CANONICAL_TAGS)
+conn.commit()
+
+# Sentinel: only do the heavy seed once (or if FORCE_RESEED=1)
+if os.path.exists(SENTINEL) and not FORCE_RESEED:
+    print("historian.db metadata reconciled to canonical 15-tag schema")
+    conn.close()
+    exit(0)
+
+# Full reseed for clean demo data story when DB is first created or FORCE_RESEED=1.
+# login_attempts is intentionally NOT cleared — captured credentials must survive restarts
+cursor.execute("DELETE FROM telemetry")
 
 # --- Quality helper ---
 def pick_quality():
