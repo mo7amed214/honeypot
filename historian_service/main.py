@@ -3,6 +3,7 @@ import os
 import sqlite3
 import time
 import uuid
+from collections import Counter
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -39,6 +40,15 @@ SERVER_BASE = os.getenv("SERVER_BASE", "http://localhost:5000")
 AUTH_USERNAME = os.getenv("HISTORIAN_USERNAME", "operator")
 AUTH_PASSWORD = os.getenv("HISTORIAN_PASSWORD", "operator123")
 
+MINIMAL6_META = {
+    "LineRunning": {"unit": "bool", "description": "Assembly line running state", "equipment": "Line Controller"},
+    "ConveyorSpeed": {"unit": "m/s", "description": "Main conveyor speed", "equipment": "Conveyor Drive"},
+    "Station1Temperature": {"unit": "degC", "description": "Station 1 process temperature", "equipment": "Station 1"},
+    "BatchCount": {"unit": "units", "description": "Total produced count", "equipment": "Production Counter"},
+    "RejectCount": {"unit": "units", "description": "Rejected parts counter", "equipment": "Quality Counter"},
+    "EmergencyStop": {"unit": "bool", "description": "Emergency stop status", "equipment": "Safety PLC"},
+}
+
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -48,6 +58,18 @@ def get_db_connection():
 
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else ""
+
+
+def fallback_meta_for_tag(tag: str) -> dict[str, str]:
+    default = {
+        "tag": tag,
+        "unit": "raw",
+        "area": "AssemblyLine",
+        "description": f"Live telemetry point: {tag}",
+        "equipment": "OPC UA Source",
+        "status": "ONLINE",
+    }
+    return {**default, **MINIMAL6_META.get(tag, {})}
 
 
 def get_tag_webid(tag: str) -> str:
@@ -490,14 +512,18 @@ def portal_tags(request: Request):
 
     conn = get_db_connection()
     rows = conn.execute(
-        "SELECT m.tag, m.unit, m.area, m.description, m.equipment, m.status "
-        "FROM tag_metadata m ORDER BY m.area, m.tag"
+        "SELECT t.tag, m.unit, m.area, m.description, m.equipment, m.status "
+        "FROM (SELECT tag FROM tag_metadata UNION SELECT DISTINCT tag FROM telemetry) t "
+        "LEFT JOIN tag_metadata m ON m.tag = t.tag "
+        "ORDER BY COALESCE(m.area, 'AssemblyLine'), t.tag"
     ).fetchall()
     conn.close()
 
     areas: dict = {}
     for row in rows:
-        areas.setdefault(row["area"], []).append(dict(row))
+        row_dict = dict(row)
+        row_dict = {**fallback_meta_for_tag(row_dict["tag"]), **{k: v for k, v in row_dict.items() if v not in (None, "")}}
+        areas.setdefault(row_dict["area"], []).append(row_dict)
 
     emit_event(
         event_type="portal_tags",
@@ -570,6 +596,8 @@ def portal_history(request: Request, tag: str | None = None):
             status = "not_found"
         else:
             values = [dict(r) for r in rows]
+            if not meta:
+                meta = fallback_meta_for_tag(tag)
     else:
         status = "empty_query"
 
@@ -595,26 +623,29 @@ def portal_overview(request: Request):
         return RedirectResponse(url="/login", status_code=302)
 
     conn = get_db_connection()
-    total_tags = conn.execute("SELECT COUNT(*) FROM tag_metadata").fetchone()[0]
+    total_tags = conn.execute("SELECT COUNT(*) FROM (SELECT tag FROM tag_metadata UNION SELECT DISTINCT tag FROM telemetry)").fetchone()[0]
     total_rows = conn.execute("SELECT COUNT(*) FROM telemetry").fetchone()[0]
-    area_counts = conn.execute(
-        "SELECT area, COUNT(*) as tag_count FROM tag_metadata GROUP BY area ORDER BY area"
-    ).fetchall()
     latest = conn.execute(
         """
         SELECT t.tag, t.timestamp, t.value, t.quality,
                m.unit, m.area, m.description, m.equipment, m.status
         FROM telemetry t
-        JOIN tag_metadata m ON t.tag = m.tag
+        LEFT JOIN tag_metadata m ON t.tag = m.tag
         WHERE t.id IN (SELECT MAX(id) FROM telemetry GROUP BY tag)
-        ORDER BY m.area, m.tag
+        ORDER BY COALESCE(m.area, 'AssemblyLine'), t.tag
         """
     ).fetchall()
     conn.close()
 
     areas: dict = {}
+    area_counter: Counter = Counter()
     for row in latest:
-        areas.setdefault(row["area"], []).append(dict(row))
+        row_dict = dict(row)
+        row_dict = {**fallback_meta_for_tag(row_dict["tag"]), **{k: v for k, v in row_dict.items() if v not in (None, "")}}
+        areas.setdefault(row_dict["area"], []).append(row_dict)
+        area_counter[row_dict["area"]] += 1
+
+    area_counts = [{"area": area, "tag_count": count} for area, count in sorted(area_counter.items())]
 
     from datetime import datetime, timezone
 

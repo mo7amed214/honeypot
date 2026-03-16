@@ -1,0 +1,31 @@
+<opc:TypeDictionary TargetNamespace="http://opcfoundation.org/UA/Robotics/" DefaultByteOrder="LittleEndian" xmlns:ua="http://opcfoundation.org/UA/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:opc="http://opcfoundation.org/BinarySchema/" xmlns:tns="http://opcfoundation.org/UA/Robotics/">
+    <opc:Import Namespace="http://opcfoundation.org/UA/"/>
+    <opc:EnumeratedType Name="AxisMotionProfileEnumeration" LengthInBits="32">
+        <opc:EnumeratedValue Value="0" Name="OTHER"/>
+        <opc:EnumeratedValue Value="1" Name="ROTARY"/>
+        <opc:EnumeratedValue Value="2" Name="ROTARY_ENDLESS"/>
+        <opc:EnumeratedValue Value="3" Name="LINEAR"/>
+        <opc:EnumeratedValue Value="4" Name="LINEAR_ENDLESS"/>
+    </opc:EnumeratedType>
+    <opc:EnumeratedType Name="ExecutionModeEnumeration" LengthInBits="32">
+        <opc:EnumeratedValue Value="0" Name="CYCLE"/>
+        <opc:EnumeratedValue Value="1" Name="CONTINUOUS"/>
+        <opc:EnumeratedValue Value="2" Name="STEP"/>
+    </opc:EnumeratedType>
+    <opc:EnumeratedType Name="MotionDeviceCategoryEnumeration" LengthInBits="32">
+        <opc:EnumeratedValue Value="0" Name="OTHER"/>
+        <opc:EnumeratedValue Value="1" Name="ARTICULATED_ROBOT"/>
+        <opc:EnumeratedValue Value="2" Name="SCARA_ROBOT"/>
+        <opc:EnumeratedValue Value="3" Name="CARTESIAN_ROBOT"/>
+        <opc:EnumeratedValue Value="4" Name="SPHERICAL_ROBOT"/>
+        <opc:EnumeratedValue Value="5" Name="PARALLEL_ROBOT"/>
+        <opc:EnumeratedValue Value="6" Name="CYLINDRICAL_ROBOT"/>
+    </opc:EnumeratedType>
+    <opc:EnumeratedType Name="OperationalModeEnumeration" LengthInBits="32">
+        <opc:EnumeratedValue Value="0" Name="OTHER"/>
+        <opc:EnumeratedValue Value="1" Name="MANUAL_REDUCED_SPEED"/>
+        <opc:EnumeratedValue Value="2" Name="MANUAL_HIGH_SPEED"/>
+        <opc:EnumeratedValue Value="3" Name="AUTOMATIC"/>
+        <opc:EnumeratedValue Value="4" Name="AUTOMATIC_EXTERNAL"/>
+    </opc:EnumeratedType>
+</opc:TypeDictionary>

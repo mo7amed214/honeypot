@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   historian_web:
     build:
@@ -28,10 +26,13 @@ services:
     command: ["python", "opcua_ingest.py"]
     environment:
       DB_PATH: /data/historian.db
-      EVENT_LOG_PATH: /var/log/historian/events.jsonl
-      OPCUA_URL: opc.tcp://host.docker.internal:4840/freeopcua/server/
+      EVENT_LOG_PATH: /var/log/historian/ingest.jsonl
+      OPCUA_URL: opc.tcp://host.docker.internal:4840
       NAMESPACE: http://manufacturing.example/opcua
-      POLL_INTERVAL_SECONDS: "3.0"
+      INGEST_PROFILE: legacy15
+      POLL_INTERVAL_SECONDS: "1.0"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - historian_data:/data
       - historian_logs:/var/log/historian
