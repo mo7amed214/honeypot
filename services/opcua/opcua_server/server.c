@@ -153,6 +153,14 @@ static void updateProcessModel(UA_Server *server, void *data) {
     ProcessModel *m = (ProcessModel *)data;
     m->tick++;
 
+    /* Keep the conveyor trend smoother for dashboard readability.
+       Planned pauses still happen, but less often and with shorter duration. */
+    const UA_UInt32 maintenance_pause_period_ticks = 1800U;
+    const UA_UInt32 maintenance_pause_duration_ticks = 12U;
+    const UA_UInt32 micro_stop_period_ticks = 480U;
+    const UA_UInt32 micro_stop_duration_ticks = 3U;
+    const UA_Double planned_stop_crawl_speed_mpm = 7.5;
+
     {
         UA_UInt32 shift_tick = m->tick % 3600U;
         UA_Double shift_load = 1.0;
@@ -174,8 +182,8 @@ static void updateProcessModel(UA_Server *server, void *data) {
             m->line_running = false;
         } else {
             m->maintenance_pause = true;
-            if((m->tick % 1200U) == 0U) {
-                m->pause_remaining = 35U;
+            if((m->tick % maintenance_pause_period_ticks) == 0U) {
+                m->pause_remaining = maintenance_pause_duration_ticks;
                 m->line_running = false;
             } else {
                 m->maintenance_pause = false;
@@ -185,8 +193,8 @@ static void updateProcessModel(UA_Server *server, void *data) {
         if(m->micro_stop_remaining > 0U) {
             m->micro_stop_remaining--;
             m->line_running = false;
-        } else if(!m->maintenance_pause && (m->tick % 260U) == 0U) {
-            m->micro_stop_remaining = 6U;
+        } else if(!m->maintenance_pause && (m->tick % micro_stop_period_ticks) == 0U) {
+            m->micro_stop_remaining = micro_stop_duration_ticks;
             m->line_running = false;
         }
 
@@ -214,7 +222,7 @@ static void updateProcessModel(UA_Server *server, void *data) {
             m->line1_conveyor_speed_mpm = approach(m->line1_conveyor_speed_mpm, speed_target, 0.28);
             m->line1_conveyor_speed_mpm = clampDouble(m->line1_conveyor_speed_mpm, 12.5, 24.0);
         } else {
-            m->line1_conveyor_speed_mpm = approach(m->line1_conveyor_speed_mpm, 0.0, 0.62);
+            m->line1_conveyor_speed_mpm = approach(m->line1_conveyor_speed_mpm, planned_stop_crawl_speed_mpm, 0.45);
             if(m->line1_conveyor_speed_mpm < 0.05)
                 m->line1_conveyor_speed_mpm = 0.0;
         }

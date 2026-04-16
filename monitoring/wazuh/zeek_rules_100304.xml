@@ -1,0 +1,20 @@
+<group name="local,zeek,network,opcua,">
+
+  <rule id="100304" level="10">
+    <decoded_as>json</decoded_as>
+    <field name="detection_id">100304A</field>
+    <field name="service">opcua.write_like</field>
+    <field name="id_resp_p">4840</field>
+    <description>100304A Zeek OPC UA write-like payload pattern detected.</description>
+    <group>zeek,network,opcua,mitm,</group>
+  </rule>
+
+  <rule id="100305" level="13">
+    <if_sid>100304</if_sid>
+    <field name="critical_target">true</field>
+    <field name="confidence">high</field>
+    <description>100304A critical OPC UA write-like payload targeting sensitive tag.</description>
+    <group>zeek,network,opcua,mitm,critical,</group>
+  </rule>
+
+</group>

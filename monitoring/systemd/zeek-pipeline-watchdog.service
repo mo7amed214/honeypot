@@ -1,0 +1,10 @@
+[Unit]
+Description=Zeek pipeline watchdog (auto-heal Zeek + relay)
+After=network.target zeek-relay.service
+Wants=zeek-relay.service
+
+[Service]
+Type=oneshot
+Environment=MAX_AGE_SECONDS=180
+ExecStart=/home/ceo/honeypot/scripts/autoheal_zeek_pipeline.sh
+User=root

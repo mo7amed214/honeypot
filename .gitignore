@@ -26,3 +26,27 @@ build.log
 Thumbs.db
 .vscode/
 .idea/
+
+# Local env files (keep examples/templates)
+**/.env*
+!**/.env.example
+
+# Runtime logs/artifacts
+**/logs/
+**/*.jsonl
+
+# Demo / local-only folders
+.venv-demo/
+
+# Legacy / scratch folders from local runs
+historian_service/
+.wazuh-backups/
+.tmp_historian_debs/
+.tmp_historian_images/
+.tmp_samba_debs/
+
+# Vendored build outputs
+open62541/build/
+
+# Accidental pip output files
+services/historian/=*

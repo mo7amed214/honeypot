@@ -1,7 +1,10 @@
+# LEGACY: single-host historian compose kept for compatibility.
+# Prefer compose/docker-compose.historian.yml in the split layout.
+
 services:
   historian_web:
     build:
-      context: ./historian_service
+      context: ./services/historian
       dockerfile: Dockerfile
     container_name: historian_web
     command: ["/app/docker-entrypoint.sh"]
@@ -20,14 +23,14 @@ services:
 
   historian_ingest:
     build:
-      context: ./historian_service
+      context: ./services/historian
       dockerfile: Dockerfile
     container_name: historian_ingest
     command: ["python", "opcua_ingest.py"]
     environment:
       DB_PATH: /data/historian.db
       EVENT_LOG_PATH: /var/log/historian/ingest.jsonl
-      OPCUA_URL: opc.tcp://host.docker.internal:4840
+      OPCUA_URL: "opc.tcp://192.168.1.11:4840"
       NAMESPACE: http://manufacturing.example/opcua
       POLL_INTERVAL_SECONDS: "1.0"
     extra_hosts:

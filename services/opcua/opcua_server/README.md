@@ -5,7 +5,7 @@ This folder contains the standalone physics-aware OPC UA server used by the hist
 ## Build
 
 ```bash
-cd opcua_server
+cd services/opcua/opcua_server
 make build
 ```
 
@@ -18,7 +18,7 @@ Or use:
 ## Run
 
 ```bash
-cd opcua_server
+cd services/opcua/opcua_server
 make run
 ```
 

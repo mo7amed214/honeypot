@@ -1,0 +1,128 @@
+# LEGACY: prior combined stack compose (historian + monitoring).
+# Kept for compatibility during cleanup. Prefer compose/docker-compose.historian.yml and compose/docker-compose.monitoring.yml.
+
+services:
+  historian-web:
+    build:
+      context: ../services/historian
+      dockerfile: Dockerfile
+    command: ["/app/docker-entrypoint.sh"]
+    environment:
+      SERVICE_NAME: ${HISTORIAN_WEB_SERVICE_NAME:-historian_web}
+      DB_PATH: /data/historian.db
+      EVENT_LOG_PATH: /var/log/historian/events.jsonl
+      HISTORIAN_USERNAME: ${HISTORIAN_USERNAME:-operator}
+      HISTORIAN_PASSWORD: ${HISTORIAN_PASSWORD:-operator123}
+      SERVER_BASE: ${SERVER_BASE:-http://localhost:5000}
+    ports:
+      - "${HISTORIAN_WEB_PORT:-5000}:5000"
+    volumes:
+      - historian_data:/data
+      - ../services/historian/logs:/var/log/historian
+    restart: unless-stopped
+
+  historian-ingest:
+    build:
+      context: ../services/historian
+      dockerfile: Dockerfile
+    command: ["python", "opcua_ingest.py"]
+    environment:
+      SERVICE_NAME: ${HISTORIAN_INGEST_SERVICE_NAME:-historian_ingest}
+      DB_PATH: /data/historian.db
+      EVENT_LOG_PATH: /var/log/historian/ingest.jsonl
+      OPCUA_URL: ${OPCUA_URL:-opc.tcp://192.168.1.11:4840}
+      NAMESPACE: ${OPCUA_NAMESPACE:-http://manufacturing.example/opcua}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-1.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - historian_data:/data
+      - ../services/historian/logs:/var/log/historian
+    restart: unless-stopped
+
+  # Optional second historian+ingest pair for modular scale-out demos.
+  # Start with: docker compose --profile multi up -d
+  historian-web-h2:
+    profiles: ["multi"]
+    build:
+      context: ../services/historian
+      dockerfile: Dockerfile
+    command: ["/app/docker-entrypoint.sh"]
+    environment:
+      SERVICE_NAME: ${HISTORIAN2_WEB_SERVICE_NAME:-historian2_web}
+      DB_PATH: /data/historian2.db
+      EVENT_LOG_PATH: /var/log/historian/h2-events.jsonl
+      HISTORIAN_USERNAME: ${HISTORIAN2_USERNAME:-operator2}
+      HISTORIAN_PASSWORD: ${HISTORIAN2_PASSWORD:-operator2}
+      SERVER_BASE: ${HISTORIAN2_SERVER_BASE:-http://localhost:5001}
+    ports:
+      - "${HISTORIAN2_WEB_PORT:-5001}:5000"
+    volumes:
+      - historian2_data:/data
+      - ../services/historian/logs:/var/log/historian
+    restart: unless-stopped
+
+  historian-ingest-h2:
+    profiles: ["multi"]
+    build:
+      context: ../services/historian
+      dockerfile: Dockerfile
+    command: ["python", "opcua_ingest.py"]
+    environment:
+      SERVICE_NAME: ${HISTORIAN2_INGEST_SERVICE_NAME:-historian2_ingest}
+      DB_PATH: /data/historian2.db
+      EVENT_LOG_PATH: /var/log/historian/h2-ingest.jsonl
+      OPCUA_URL: ${OPCUA_URL_2:-opc.tcp://192.168.1.12:4840}
+      NAMESPACE: ${OPCUA_NAMESPACE_2:-http://manufacturing.example/opcua}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS_2:-1.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - historian2_data:/data
+      - ../services/historian/logs:/var/log/historian
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - historian-web
+
+  loki:
+    image: grafana/loki:2.9.8
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ../monitoring/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    command: -config.file=/etc/promtail/config.yml
+    ports:
+      - "${PROMTAIL_PORT:-9080}:9080"
+    volumes:
+      - /var/lib/docker/volumes/single-node_wazuh_logs/_data/alerts:/var/ossec/logs/alerts:ro
+      - ../monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - promtail_positions:/tmp
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+volumes:
+  historian_data:
+  historian2_data:
+  grafana_data:
+  loki_data:
+  promtail_positions:

@@ -191,7 +191,7 @@
       <form method="post" action="/login" autocomplete="off">
         <label for="username">Username</label>
         <input type="text" id="username" name="username"
-               placeholder="e.g. piadmin" autofocus />
+               placeholder="e.g. piadmin" value="{{ remembered_username or '' }}" autofocus />
 
         <label for="password">Password</label>
         <input type="password" id="password" name="password"
@@ -199,6 +199,11 @@
 
         <button type="submit">Sign In</button>
       </form>
+      {% if remembered_username %}
+      <p style="font-size:.74rem;color:#8b949e;margin-top:10px;text-align:center;">
+        Last username remembered on this browser: <strong>{{ remembered_username }}</strong>
+      </p>
+      {% endif %}
 
       <hr class="divider" />
       <p class="hint">

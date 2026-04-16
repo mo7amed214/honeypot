@@ -4,12 +4,13 @@ import random
 import sqlite3
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
+from urllib.parse import urlparse
 
 try:
     from asyncua import Client
 except ModuleNotFoundError as exc:
     raise SystemExit(
-        "Missing Python dependency 'asyncua'. Install historian_service/requirements.txt or run via docker compose."
+        "Missing Python dependency 'asyncua'. Install services/historian/requirements.txt or run via docker compose."
     ) from exc
 
 from event_logger import emit_event
@@ -35,6 +36,17 @@ TAGS = {
     "plant_power_kw": {"path": "plant_power_kw", "min": 80.0, "max": 280.0, "max_step": 20.0},
     "cooling_water_temp_c": {"path": "cooling_water_temp_c", "min": 10.0, "max": 40.0, "max_step": 2.0},
 }
+
+
+def opcua_target_host(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.hostname:
+        return parsed.hostname
+    # Fallback for malformed values that still resemble host:port
+    if "://" in url:
+        tail = url.split("://", 1)[1]
+        return tail.split(":", 1)[0].split("/", 1)[0]
+    return ""
 
 
 def utc_now_iso() -> str:
@@ -142,12 +154,21 @@ def write_batch(conn: sqlite3.Connection, rows: list[tuple]):
 
 
 async def main():
+    target_host = opcua_target_host(OPCUA_URL)
     print(f"[ingest] connecting to {OPCUA_URL}")
     print(f"[ingest] profile=canonical15 namespace={NAMESPACE}")
     print(f"[ingest] DB_PATH={DB_PATH} tags={len(TAGS)}")
-    emit_event(event_type="ingest_start", route="opcua_ingest", status="starting")
+    emit_event(
+        event_type="ingest_start",
+        src_ip=target_host,
+        route="opcua_ingest",
+        status="starting",
+        extra={"target_endpoint": OPCUA_URL},
+    )
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=10000")
     ensure_schema(conn)
 
     previous_values: Dict[str, float] = {}
@@ -164,7 +185,13 @@ async def main():
                     for tag, cfg in TAGS.items()
                 }
                 print(f"[ingest] connected - {len(node_map)} tags mapped")
-                emit_event(event_type="ingest_connection", route="opcua_ingest", status="connected")
+                emit_event(
+                    event_type="ingest_connection",
+                    src_ip=target_host,
+                    route="opcua_ingest",
+                    status="connected",
+                    extra={"target_endpoint": OPCUA_URL},
+                )
                 retry_delay = 2.0
 
                 while True:
@@ -217,7 +244,13 @@ async def main():
 
         except Exception as exc:
             print(f"[ingest] error: {exc} retry in {retry_delay:.1f}s")
-            emit_event(event_type="ingest_connection", route="opcua_ingest", status="error", extra={"error": str(exc)})
+            emit_event(
+                event_type="ingest_connection",
+                src_ip=target_host,
+                route="opcua_ingest",
+                status="error",
+                extra={"error": str(exc), "target_endpoint": OPCUA_URL},
+            )
             await asyncio.sleep(retry_delay)
             retry_delay = min(15.0, retry_delay + 1.5)
 

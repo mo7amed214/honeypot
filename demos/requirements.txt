@@ -1,0 +1,2 @@
+streamlit>=1.37.0
+paramiko>=3.4.0

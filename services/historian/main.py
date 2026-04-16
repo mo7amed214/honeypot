@@ -62,8 +62,10 @@ AREA_ORDER = ["Assembly Line 1", "Welding Cell", "Packaging Station", "Utilities
 
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
+    # Use timeout/busy_timeout to tolerate brief concurrent writes.
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=10000")
     return conn
 
 
@@ -138,11 +140,14 @@ def root_redirect():
 
 @app.get("/login", response_class=HTMLResponse)
 def login_get(request: Request):
+    remembered_username = request.cookies.get("historian_last_user", "")
     return templates.TemplateResponse(
-        "login.html",
-        {
+        request=request,
+        name="login.html",
+        context={
             "request": request,
             "error": request.query_params.get("error", ""),
+            "remembered_username": remembered_username,
         },
     )
 
@@ -150,13 +155,15 @@ def login_get(request: Request):
 @app.post("/login")
 async def login_post(
     request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
+    username: str = Form(""),
+    password: str = Form(""),
 ):
     ts_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     ip = client_ip(request)
     user_agent = request.headers.get("User-Agent", "")
-    status = "success" if (username == AUTH_USERNAME and password == AUTH_PASSWORD) else "failed"
+    username = (username or "").strip()
+    password = (password or "").strip()
+    status = "success" if (username and password) else "failed"
 
     conn = get_db_connection()
     conn.execute(
@@ -177,8 +184,9 @@ async def login_post(
 
     if status == "failed":
         return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Invalid username or password."},
+            request=request,
+            name="login.html",
+            context={"request": request, "error": "Username and password are required."},
             status_code=401,
         )
 
@@ -186,6 +194,8 @@ async def login_post(
     active_sessions[token] = {"username": username}
     resp = RedirectResponse(url="/portal", status_code=302)
     resp.set_cookie("historian_session", token, httponly=True, samesite="lax")
+    # UI preference cookie to prefill username on next visit (not used for auth).
+    resp.set_cookie("historian_last_user", username, max_age=60 * 60 * 24 * 30, samesite="lax")
     return resp
 
 
@@ -193,6 +203,91 @@ async def login_post(
 def api_root(request: Request):
     emit_event(event_type="api_probe", src_ip=client_ip(request), route="/api", status="success")
     return {"service": "historian", "status": "running", "version": "3.4.440.2"}
+
+
+@app.get("/api/grafana/latest")
+def grafana_latest(request: Request):
+    conn = get_db_connection()
+    rows = conn.execute(
+        """
+        WITH latest AS (
+            SELECT tag, MAX(id) AS max_id
+            FROM telemetry
+            GROUP BY tag
+        )
+        SELECT m.tag,
+               t.value,
+               t.timestamp,
+               COALESCE(t.quality, 'n/a') AS quality,
+               m.area,
+               m.unit,
+               m.equipment
+        FROM tag_metadata m
+        LEFT JOIN latest l ON l.tag = m.tag
+        LEFT JOIN telemetry t ON t.id = l.max_id
+        WHERE m.tag IN ({placeholders})
+        ORDER BY CASE m.area
+          WHEN 'Assembly Line 1' THEN 1
+          WHEN 'Welding Cell' THEN 2
+          WHEN 'Packaging Station' THEN 3
+          WHEN 'Utilities' THEN 4
+          ELSE 99 END,
+          m.tag
+        """.format(placeholders=",".join("?" for _ in CANONICAL_TAGS)),
+        tuple(CANONICAL_TAGS),
+    ).fetchall()
+    conn.close()
+
+    emit_event(
+        event_type="grafana_latest",
+        src_ip=client_ip(request),
+        route="/api/grafana/latest",
+        status="success",
+        user_agent=request.headers.get("User-Agent", ""),
+    )
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/grafana/history")
+def grafana_history(tag: str, request: Request):
+    if tag not in CANONICAL_TAGS:
+        emit_event(
+            event_type="grafana_history",
+            src_ip=client_ip(request),
+            route="/api/grafana/history",
+            tag=tag,
+            status="not_found",
+            user_agent=request.headers.get("User-Agent", ""),
+        )
+        return JSONResponse(status_code=404, content={"error": "tag not found"})
+
+    try:
+        conn = get_db_connection()
+        rows = conn.execute(
+            "SELECT timestamp, value, quality FROM telemetry WHERE tag = ? ORDER BY timestamp DESC LIMIT 2000",
+            (tag,),
+        ).fetchall()
+        conn.close()
+    except sqlite3.OperationalError:
+        emit_event(
+            event_type="grafana_history",
+            src_ip=client_ip(request),
+            route="/api/grafana/history",
+            tag=tag,
+            status="db_locked",
+            user_agent=request.headers.get("User-Agent", ""),
+        )
+        return []
+
+    emit_event(
+        event_type="grafana_history",
+        src_ip=client_ip(request),
+        route="/api/grafana/history",
+        tag=tag,
+        status="success",
+        user_agent=request.headers.get("User-Agent", ""),
+    )
+    return [dict(r) for r in rows]
 
 
 @app.get("/tags")
@@ -513,7 +608,7 @@ def portal_home(request: Request):
         status="success",
         user_agent=request.headers.get("User-Agent", ""),
     )
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html", context={"request": request})
 
 
 @app.get("/portal/tags", response_class=HTMLResponse)
@@ -548,7 +643,7 @@ def portal_tags(request: Request):
         status="success",
         user_agent=request.headers.get("User-Agent", ""),
     )
-    return templates.TemplateResponse("tags.html", {"request": request, "areas": areas})
+    return templates.TemplateResponse(request=request, name="tags.html", context={"request": request, "areas": areas})
 
 
 @app.get("/portal/history/live")
@@ -557,19 +652,31 @@ def portal_history_live(request: Request, tag: str, since: str = ""):
     if not session:
         return JSONResponse(status_code=401, content={"error": "unauthorized"})
 
-    conn = get_db_connection()
-    if since:
-        rows = conn.execute(
-            "SELECT timestamp, value, quality FROM telemetry "
-            "WHERE tag = ? AND timestamp > ? ORDER BY timestamp DESC LIMIT 50",
-            (tag, since),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT timestamp, value, quality FROM telemetry WHERE tag = ? ORDER BY timestamp DESC LIMIT 1",
-            (tag,),
-        ).fetchall()
-    conn.close()
+    try:
+        conn = get_db_connection()
+        if since:
+            rows = conn.execute(
+                "SELECT timestamp, value, quality FROM telemetry "
+                "WHERE tag = ? AND timestamp > ? ORDER BY timestamp DESC LIMIT 50",
+                (tag, since),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT timestamp, value, quality FROM telemetry WHERE tag = ? ORDER BY timestamp DESC LIMIT 1",
+                (tag,),
+            ).fetchall()
+        conn.close()
+    except sqlite3.OperationalError:
+        emit_event(
+            event_type="portal_live_poll",
+            src_ip=client_ip(request),
+            username=session.get("username", ""),
+            route=request.url.path,
+            tag=tag,
+            status="db_locked",
+            user_agent=request.headers.get("User-Agent", ""),
+        )
+        return JSONResponse(content={"rows": []})
 
     emit_event(
         event_type="portal_live_poll",
@@ -611,8 +718,9 @@ def portal_history(request: Request, tag: str | None = None):
                 user_agent=request.headers.get("User-Agent", ""),
             )
             return templates.TemplateResponse(
-                "history.html",
-                {"request": request, "tag": tag, "values": None, "error": error, "meta": None},
+                request=request,
+                name="history.html",
+                context={"request": request, "tag": tag, "values": None, "error": error, "meta": None},
             )
 
         rows = conn.execute(
@@ -641,8 +749,9 @@ def portal_history(request: Request, tag: str | None = None):
         user_agent=request.headers.get("User-Agent", ""),
     )
     return templates.TemplateResponse(
-        "history.html",
-        {"request": request, "tag": tag, "values": values, "error": error, "meta": meta},
+        request=request,
+        name="history.html",
+        context={"request": request, "tag": tag, "values": values, "error": error, "meta": meta},
     )
 
 
@@ -715,8 +824,9 @@ def portal_overview(request: Request):
         user_agent=request.headers.get("User-Agent", ""),
     )
     return templates.TemplateResponse(
-        "overview.html",
-        {
+        request=request,
+        name="overview.html",
+        context={
             "request": request,
             "total_tags": total_tags,
             "total_rows": total_rows,

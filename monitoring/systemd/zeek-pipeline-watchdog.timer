@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Zeek pipeline watchdog every minute
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Unit=zeek-pipeline-watchdog.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,80 @@
+<group name="local,zeek,network,">
+
+  <rule id="100300" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="proto">tcp</field>
+    <description>Zeek network connection observed.</description>
+    <group>zeek,network,</group>
+  </rule>
+
+  <rule id="100301" level="8">
+    <if_sid>100300</if_sid>
+    <field name="id.orig_h" type="pcre2">^192[.]168[.]1[.](5|6|9|10|11)$</field>
+    <field name="id.resp_h" type="pcre2">^192[.]168[.]1[.](9|10)$</field>
+    <field name="id.resp_p">5000</field>
+    <description>Zeek host-to-historian web connection observed.</description>
+    <group>zeek,network,</group>
+  </rule>
+
+  <rule id="100302" level="8">
+    <if_sid>100300</if_sid>
+    <field name="id.orig_h" type="pcre2">^192[.]168[.]1[.](5|6|9|10|11)$</field>
+    <field name="id.resp_h" type="pcre2">^192[.]168[.]1[.](7|9)$</field>
+    <field name="id.resp_p">445</field>
+    <description>Zeek host-to-historian SMB connection observed.</description>
+    <group>zeek,network,</group>
+  </rule>
+
+  <rule id="100303" level="7">
+    <if_sid>100300</if_sid>
+    <field name="id.orig_h" type="pcre2">^192[.]168[.]1[.](5|9)$</field>
+    <field name="id.resp_h" type="pcre2">^192[.]168[.]1[.](6|11)$</field>
+    <field name="id.resp_p">4840</field>
+    <description>Zeek OPC UA traffic from EWS/historian toward OPC UA server observed.</description>
+    <group>zeek,network,</group>
+  </rule>
+
+  <rule id="100304" level="10">
+    <decoded_as>json</decoded_as>
+    <field name="detection_id">100304A</field>
+    <field name="service">opcua.write_like</field>
+    <field name="id_resp_p">4840</field>
+    <description>100304A Zeek OPC UA write-like payload pattern detected.</description>
+    <group>zeek,network,opcua,mitm,</group>
+  </rule>
+
+  <rule id="100305" level="13">
+    <if_sid>100304</if_sid>
+    <field name="critical_target">true</field>
+    <field name="confidence">high</field>
+    <description>100304A critical OPC UA write-like payload targeting sensitive tag.</description>
+    <group>zeek,network,opcua,mitm,critical,</group>
+  </rule>
+
+  <rule id="100401" level="7">
+    <decoded_as>json</decoded_as>
+    <field name="agent.name">EWS-WIN11</field>
+    <field name="event_id">4778</field>
+    <field name="logon_type">10</field>
+    <description>RDP session initiated on EWS endpoint.</description>
+    <group>rdp,session,endpoint,</group>
+  </rule>
+
+  <rule id="100402" level="7">
+    <decoded_as>json</decoded_as>
+    <field name="agent.name">EWS-WIN11</field>
+    <field name="event_id">4624</field>
+    <field name="logon_process" type="pcre2">sshd|SSH</field>
+    <description>SSH session initiated on EWS endpoint.</description>
+    <group>ssh,session,endpoint,</group>
+  </rule>
+
+  <rule id="100403" level="8">
+    <decoded_as>json</decoded_as>
+    <field name="agent.name">EWS-WIN11</field>
+    <field name="image" type="pcre2">(?i)(powershell|cmd|wscript|cscript|taskmgr)</field>
+    <description>Suspicious process execution detected on EWS endpoint.</description>
+    <group>process,execution,endpoint,suspicious,</group>
+  </rule>
+
+</group>

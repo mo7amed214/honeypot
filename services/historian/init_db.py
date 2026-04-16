@@ -32,8 +32,15 @@ def make_webid(tag: str) -> str:
     b64 = base64.b64encode(f"{PI_SERVER_NAME}\\{tag}".encode()).decode().replace("=", "")
     return "F1DP" + b64[:28]
 
-conn = sqlite3.connect(DB_PATH, timeout=30)
+conn = sqlite3.connect(DB_PATH, timeout=2)
 cursor = conn.cursor()
+
+# Reduce lock contention during startup reconciliation while ingest is active.
+try:
+    cursor.execute("PRAGMA journal_mode=WAL")
+except sqlite3.OperationalError:
+    pass
+cursor.execute("PRAGMA busy_timeout=2000")
 
 # Always run lightweight table creation (safe with concurrent readers)
 cursor.execute("""
