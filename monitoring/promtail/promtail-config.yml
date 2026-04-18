@@ -25,15 +25,26 @@ scrape_configs:
             agent_name: agent.name
             rule_level: rule.level
             session_id: data.session_id
+            telemetry_origin: data.telemetry_origin
+            ground_truth_label: data.ground_truth_label
+            scenario_family: data.scenario_family
+            dataset_split: data.dataset_split
       - static_labels:
           attack_stage: other
           asset_class: other
+          telemetry_origin: live_sensor
+          ground_truth_label: observed
+          dataset_split: observed
       - labels:
           rule_id:
           rule_description:
           agent_name:
           rule_level:
           session_id:
+          telemetry_origin:
+          ground_truth_label:
+          scenario_family:
+          dataset_split:
       - match:
           selector: '{agent_name=~"(?i).*(ews|engineering).*"}'
           stages:
@@ -53,11 +64,23 @@ scrape_configs:
                 attack_stage: smb_access
                 asset_class: smb
       - match:
+          selector: '{rule_id="100306"}'
+          stages:
+            - static_labels:
+                attack_stage: smb_access
+                asset_class: smb
+      - match:
           selector: '{rule_id="100303"}'
           stages:
             - static_labels:
                 attack_stage: opcua_path
                 asset_class: opcua
+      - match:
+          selector: '{rule_id="100307"}'
+          stages:
+            - static_labels:
+                attack_stage: discovery
+                asset_class: level3
       - match:
           selector: '{rule_id="100304"}'
           stages:
@@ -70,6 +93,24 @@ scrape_configs:
             - static_labels:
                 attack_stage: opcua_write
                 asset_class: opcua
+      - match:
+          selector: '{rule_id="100404"}'
+          stages:
+            - static_labels:
+                attack_stage: host_command
+                asset_class: ews
+      - match:
+          selector: '{rule_id="100405"}'
+          stages:
+            - static_labels:
+                attack_stage: host_scriptblock
+                asset_class: ews
+      - match:
+          selector: '{rule_id="100406"}'
+          stages:
+            - static_labels:
+                attack_stage: process_anomaly
+                asset_class: ews
       - match:
           selector: '{rule_id="100209"}'
           stages:

@@ -13,6 +13,8 @@ This repo contains a small ICS honeypot + SOC demo stack:
 - `monitoring/` — monitoring + detection configs (Promtail/Loki, Wazuh rules, Zeek, Sysmon)
 - `demos/` — Streamlit demos used for the presentation
 - `scripts/` — helper scripts
+- `docs/` — schema and operations notes for replay, labeling, and capture workflows
+  - `docs/lab_hardening.md` — operational guardrails for isolation, retention, and reset hygiene
 
 ## Quick start (from repo root)
 
@@ -53,3 +55,17 @@ Default ports:
 - Loki: `http://localhost:3100`
 - Historian web: `http://localhost:5000`
 - Streamlit demo: `http://localhost:8501`
+
+## Operations helpers
+
+- `bash scripts/check_zeek_pipeline.sh` — validate Zeek live capture and relay propagation
+- `bash scripts/smoke_zeek_wazuh_loki.sh` — inject labeled smoke marker and verify Loki/Wazuh flow
+- `docs/zeek_virtualbox_east_west.md` — recommended Zeek placement when VMs live on a different VirtualBox host
+- `bash scripts/check_lab_time_sync.sh` — compare UTC time across the monitoring host and reachable lab assets
+- `bash scripts/replay_attack_scenario.sh` — run a labeled live replay and write a ground-truth manifest
+- `bash scripts/validate_honeypot_readiness.sh` — run a full replay plus alert verification for host, app, and OT coverage
+- `bash scripts/demo_green_check.sh` — short pass/fail check for Zeek, Wazuh, and Loki demo readiness
+- `bash scripts/archive_telemetry_bundle.sh <scenario-id>` — snapshot Zeek, Wazuh, and historian logs into an archive
+- `bash scripts/capture_benign_baseline.sh <duration-seconds> [scenario-id]` — collect a benign capture window and archive it
+- `bash scripts/reset_lab_state.sh` — clean up non-destructive demo residue and stop MITM tooling
+- `bash scripts/apply_ews_host_telemetry.sh` — enable EWS PowerShell logging and Wazuh collection for script blocks

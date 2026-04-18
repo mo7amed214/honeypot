@@ -40,5 +40,6 @@ services:
 
 volumes:
   grafana_data:
+    name: historian_service_grafana_data
   loki_data:
   promtail_positions:

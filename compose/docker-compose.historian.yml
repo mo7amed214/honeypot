@@ -11,8 +11,8 @@ services:
       SERVICE_NAME: ${HISTORIAN_WEB_SERVICE_NAME:-historian_web}
       DB_PATH: /data/historian.db
       EVENT_LOG_PATH: /var/log/historian/events.jsonl
-      HISTORIAN_USERNAME: ${HISTORIAN_USERNAME:-operator}
-      HISTORIAN_PASSWORD: ${HISTORIAN_PASSWORD:-operator123}
+      HISTORIAN_USERNAME: ${HISTORIAN_USERNAME:-john}
+      HISTORIAN_PASSWORD: ${HISTORIAN_PASSWORD:-Cisco}
       SERVER_BASE: ${SERVER_BASE:-http://localhost:5000}
     ports:
       - "${HISTORIAN_WEB_PORT:-5000}:5000"

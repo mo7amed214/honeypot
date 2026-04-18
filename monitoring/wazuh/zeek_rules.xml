@@ -25,6 +25,16 @@
     <group>zeek,network,</group>
   </rule>
 
+  <rule id="100306" level="8">
+    <decoded_as>json</decoded_as>
+    <field name="id.orig_h" type="pcre2">^192[.]168[.]1[.](5|6|9|10|11)$</field>
+    <field name="id.resp_h" type="pcre2">^192[.]168[.]1[.](7|9)$</field>
+    <field name="id.resp_p">445</field>
+    <field name="path" type="pcre2">.+</field>
+    <description>Zeek SMB share or file activity observed.</description>
+    <group>zeek,network,smb,</group>
+  </rule>
+
   <rule id="100303" level="7">
     <if_sid>100300</if_sid>
     <field name="id.orig_h" type="pcre2">^192[.]168[.]1[.](5|9)$</field>
@@ -32,6 +42,14 @@
     <field name="id.resp_p">4840</field>
     <description>Zeek OPC UA traffic from EWS/historian toward OPC UA server observed.</description>
     <group>zeek,network,</group>
+  </rule>
+
+  <rule id="100307" level="9">
+    <decoded_as>json</decoded_as>
+    <field name="detection_id">100307A</field>
+    <field name="service">network.discovery_scan</field>
+    <description>Zeek rapid discovery scan observed against Level 3 services.</description>
+    <group>zeek,network,discovery,scan,</group>
   </rule>
 
   <rule id="100304" level="10">
@@ -47,34 +65,59 @@
     <if_sid>100304</if_sid>
     <field name="critical_target">true</field>
     <field name="confidence">high</field>
-    <description>100304A critical OPC UA write-like payload targeting sensitive tag.</description>
+    <description>100304A critical OPC UA write-like activity observed from sensitive tag or sustained EWS write session.</description>
     <group>zeek,network,opcua,mitm,critical,</group>
   </rule>
 
   <rule id="100401" level="7">
-    <decoded_as>json</decoded_as>
-    <field name="agent.name">EWS-WIN11</field>
-    <field name="event_id">4778</field>
-    <field name="logon_type">10</field>
+    <if_sid>60108</if_sid>
+    <field name="win.system.eventID">^4778$</field>
+    <field name="win.system.computer">^EWS-WIN11$</field>
     <description>RDP session initiated on EWS endpoint.</description>
     <group>rdp,session,endpoint,</group>
   </rule>
 
-  <rule id="100402" level="7">
-    <decoded_as>json</decoded_as>
-    <field name="agent.name">EWS-WIN11</field>
-    <field name="event_id">4624</field>
-    <field name="logon_process" type="pcre2">sshd|SSH</field>
-    <description>SSH session initiated on EWS endpoint.</description>
+  <rule id="100402" level="8">
+    <if_sid>60200</if_sid>
+    <field name="win.system.eventID">^4624$</field>
+    <field name="win.system.computer">^EWS-WIN11$</field>
+    <field name="win.eventdata.processName" type="pcre2">(?i)\\\\OpenSSH\\\\sshd\.exe$</field>
+    <description>SSH session initiated on EWS endpoint for $(win.eventdata.targetUserName).</description>
     <group>ssh,session,endpoint,</group>
   </rule>
 
   <rule id="100403" level="8">
-    <decoded_as>json</decoded_as>
-    <field name="agent.name">EWS-WIN11</field>
-    <field name="image" type="pcre2">(?i)(powershell|cmd|wscript|cscript|taskmgr)</field>
-    <description>Suspicious process execution detected on EWS endpoint.</description>
+    <if_sid>92032,92052</if_sid>
+    <field name="win.system.computer">^EWS-WIN11$</field>
+    <field name="win.eventdata.image" type="pcre2" negate="yes">(?i)\\\\conhost\.exe$</field>
+    <description>EWS shell/process execution observed: $(win.eventdata.commandLine)</description>
     <group>process,execution,endpoint,suspicious,</group>
+  </rule>
+
+  <rule id="100404" level="6">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.system.computer">^EWS-WIN11$</field>
+    <field name="win.eventdata.commandLine" type="pcre2">.+</field>
+    <field name="win.eventdata.parentImage" type="pcre2">(?i)(\\\\OpenSSH\\\\sshd|\\\\cmd|\\\\powershell|\\\\pwsh|\\\\wscript|\\\\cscript)\.exe$</field>
+    <field name="win.eventdata.image" type="pcre2" negate="yes">(?i)(\\\\conhost|\\\\sshd)\.exe$</field>
+    <description>EWS command execution: $(win.eventdata.commandLine)</description>
+    <group>process,execution,endpoint,commandline,ews,</group>
+  </rule>
+
+  <rule id="100405" level="7">
+    <if_sid>91802</if_sid>
+    <field name="win.system.computer">^EWS-WIN11$</field>
+    <field name="win.eventdata.scriptBlockText" type="pcre2">(?is).*(Invoke-WebRequest|Invoke-RestMethod|Start-Process|Get-Process|Get-NetIPAddress|Get-SmbMapping|Get-ChildItem|Write-Output|curl|wget|certutil|FromBase64String|EncodedCommand|IEX|Invoke-Expression|New-Object\s+Net[.]WebClient|DownloadString|Get-Content|Set-Content|Add-Content|net\s+use|Test-Connection).*</field>
+    <field name="win.eventdata.scriptBlockText" type="pcre2" negate="yes">(?is).*(?:__cmdletization_|Export-ModuleMember|Set-StrictMode\s+-Version\s+1;\s*\$_\.(?:ErrorCategory_Message|OriginInfo|PSMessageDetails)|^\$global:\?$|GetAccessControlEntries|SmbServerCertificateMapping|CimCmdlets).*</field>
+    <description>EWS PowerShell script block observed: $(win.eventdata.scriptBlockText)</description>
+    <group>powershell,scriptblock,endpoint,commandline,ews,</group>
+  </rule>
+
+  <rule id="100406" level="11">
+    <if_sid>100404</if_sid>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(?:ProgramData|Users\\\\[^\\\\]+\\\\AppData\\\\Local)\\\\Microsoft\\\\Diagnosis\\\\telemetry_sync_cache\.py</field>
+    <description>EWS staged OT manipulation tool executed: $(win.eventdata.commandLine)</description>
+    <group>process,execution,endpoint,anomaly,ot_impact,ews,</group>
   </rule>
 
 </group>

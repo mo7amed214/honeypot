@@ -1,0 +1,15 @@
+[Unit]
+Description=Relay historian logs into the Wazuh manager log volume
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/historian-wazuh-relay
+ExecStart=/home/ceo/honeypot/scripts/historian_wazuh_relay.sh
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

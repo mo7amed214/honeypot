@@ -37,8 +37,8 @@ PI_SERVER_WEBID = "s0UbkMxHpJ0RGPlantPi01Server000"
 AF_SERVER_WEBID = "s0AfServerPlantAF010000000000000"
 SERVER_BASE = os.getenv("SERVER_BASE", "http://localhost:5000")
 
-AUTH_USERNAME = os.getenv("HISTORIAN_USERNAME", "operator")
-AUTH_PASSWORD = os.getenv("HISTORIAN_PASSWORD", "operator123")
+AUTH_USERNAME = os.getenv("HISTORIAN_USERNAME", "john")
+AUTH_PASSWORD = os.getenv("HISTORIAN_PASSWORD", "Cisco")
 
 CANONICAL_TAGS = [
     "line1_conveyor_speed_mpm",
@@ -163,7 +163,9 @@ async def login_post(
     user_agent = request.headers.get("User-Agent", "")
     username = (username or "").strip()
     password = (password or "").strip()
-    status = "success" if (username and password) else "failed"
+    has_credentials = bool(username and password)
+    credentials_valid = has_credentials and username == AUTH_USERNAME and password == AUTH_PASSWORD
+    status = "success" if credentials_valid else "failed"
 
     conn = get_db_connection()
     conn.execute(
@@ -182,11 +184,18 @@ async def login_post(
         user_agent=user_agent,
     )
 
-    if status == "failed":
+    if not has_credentials:
         return templates.TemplateResponse(
             request=request,
             name="login.html",
             context={"request": request, "error": "Username and password are required."},
+            status_code=401,
+        )
+    if not credentials_valid:
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={"request": request, "error": "Invalid username or password."},
             status_code=401,
         )
 

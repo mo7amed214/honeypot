@@ -34,6 +34,9 @@ Thumbs.db
 # Runtime logs/artifacts
 **/logs/
 **/*.jsonl
+artifacts/
+ml/runs/
+ml/checkpoints/
 
 # Demo / local-only folders
 .venv-demo/

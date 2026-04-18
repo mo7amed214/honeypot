@@ -16,14 +16,18 @@ export {
     matched_tag: string &log;
     critical_target: string &log;
     confidence: string &log;
+    critical_reason: string &log;
+    source_role: string &log;
+    session_duration: interval &log;
+    orig_bytes: count &log;
+    resp_bytes: count &log;
   };
 
   # Heuristic byte markers for OPC UA Write-like service IDs in binary payloads.
-  const write_markers: vector of string = {
-    "\x01\xa1\x02",     # two-byte numeric node id encoding marker + 0x02A1
-    "\xa1\x02\x00\x00",# little-endian 0x000002A1
-    "\xcd\x02\x00\x00" # alternative observed write-like marker in some stacks
-  } &redef;
+  #
+  # Avoid markers containing NUL bytes here: Zeek logs reporter errors for
+  # embedded-NUL string constants even though the script still loads.
+  const write_marker_nodeid_02a1: string = "\x01\xa1\x02" &redef;
 
   # Potentially safety/quality-impacting tag names expected from this environment.
   const critical_tag_keywords: vector of string = {
@@ -36,14 +40,12 @@ export {
 }
 
 global seen_uids: set[string] = set();
+global pending_detections: table[string] of Info = table();
 
-function contains_marker(payload: string): string
+function detect_marker(payload: string): string
   {
-  for ( i in write_markers )
-    {
-    if ( write_markers[i] in payload )
-      return write_markers[i];
-    }
+  if ( write_marker_nodeid_02a1 in payload )
+    return "nodeid_02a1_prefix";
 
   return "";
   }
@@ -85,34 +87,70 @@ event tcp_packet(c: connection, is_orig: bool, flags: string, seq: count, ack: c
   # Marker bytes vary between stacks and framing details. Treat MSGF client
   # request packets on OPC UA port 4840 as write-like candidates, then boost
   # confidence when known write markers are present.
-  local marker = contains_marker(payload);
+  local marker = detect_marker(payload);
   if ( marker == "" )
     marker = "msgf_only";
 
   local matched_tag = contains_critical_tag(payload);
   local critical_target = "false";
   local confidence = "medium";
+  local critical_reason = "write_like_payload";
   if ( marker != "msgf_only" )
     confidence = "high";
   if ( matched_tag != "" )
     {
     critical_target = "true";
     confidence = "high";
+    critical_reason = "critical_tag_keyword";
     }
 
   add seen_uids[c$uid];
+  local source_role = "other_local";
+  if ( c$id$orig_h == 192.168.1.5 )
+    source_role = "ews";
+  else if ( c$id$orig_h == 192.168.1.9 )
+    source_role = "monitor";
 
-  Log::write(LOG,
+  pending_detections[c$uid] =
     [$ts=network_time(),
      $uid=c$uid,
      $id_orig_h=c$id$orig_h,
      $id_orig_p=c$id$orig_p,
      $id_resp_h=c$id$resp_h,
      $id_resp_p=c$id$resp_p,
-      $detection_id="100304A",
+     $detection_id="100304A",
      $service="opcua.write_like",
-        $marker=marker,
-        $matched_tag=matched_tag,
-        $critical_target=critical_target,
-        $confidence=confidence]);
+     $marker=marker,
+     $matched_tag=matched_tag,
+     $critical_target=critical_target,
+     $confidence=confidence,
+     $critical_reason=critical_reason,
+     $source_role=source_role,
+     $session_duration=0secs,
+     $orig_bytes=0,
+     $resp_bytes=0];
+  }
+
+event connection_state_remove(c: connection)
+  {
+  if ( c$uid !in pending_detections )
+    return;
+
+  local info = pending_detections[c$uid];
+  info$session_duration = c$duration;
+  info$orig_bytes = c$orig$size;
+  info$resp_bytes = c$resp$size;
+
+  if ( info$critical_target != "true" &&
+       c$id$orig_h == 192.168.1.5 &&
+       c$duration >= 5secs &&
+       c$orig$size >= 4096 )
+    {
+    info$critical_target = "true";
+    info$confidence = "high";
+    info$critical_reason = "ews_sustained_write_session";
+    }
+
+  Log::write(LOG, info);
+  delete pending_detections[c$uid];
   }

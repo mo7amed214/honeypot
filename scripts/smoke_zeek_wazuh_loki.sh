@@ -17,7 +17,7 @@ fail() {
 }
 
 inject_test_event() {
-  printf '{"ts":%.6f,"uid":"%s","id.orig_h":"192.168.1.6","id.orig_p":54545,"id.resp_h":"192.168.1.9","id.resp_p":445,"proto":"tcp","conn_state":"SF","local_orig":true,"local_resp":true,"missed_bytes":0,"history":"ShADadfF","orig_pkts":12,"orig_ip_bytes":980,"resp_pkts":10,"resp_ip_bytes":860,"ip_proto":6}\n' "$(date +%s.%N)" "$UID_TAG" >> "$FEED_LOG"
+  printf '{"ts":%.6f,"uid":"%s","id.orig_h":"192.168.1.6","id.orig_p":54545,"id.resp_h":"192.168.1.9","id.resp_p":445,"proto":"tcp","conn_state":"SF","local_orig":true,"local_resp":true,"missed_bytes":0,"history":"ShADadfF","orig_pkts":12,"orig_ip_bytes":980,"resp_pkts":10,"resp_ip_bytes":860,"ip_proto":6,"telemetry_origin":"synthetic_smoke","ground_truth_label":"test","dataset_split":"synthetic_smoke","scenario_family":"pipeline_smoke","scenario_id":"%s","session_id":"%s","scenario_step":"smoke_pipeline","attack_label":"validation","attack_stage":"smb_access","asset_class":"smb","event_kind":"smoke_marker"}\n' "$(date +%s.%N)" "$UID_TAG" "$UID_TAG" "$UID_TAG" >> "$FEED_LOG"
   log "injected uid=$UID_TAG into $FEED_LOG"
 }
 
@@ -39,7 +39,7 @@ wait_loki_alert() {
     start_ns="$(date -u -d '10 minutes ago' +%s%N)"
     end_ns="$(date -u +%s%N)"
     out="$(curl -sG "$LOKI_URL" \
-      --data-urlencode "query={job=\"wazuh\"} |= \"$UID_TAG\"" \
+      --data-urlencode "query={job=\"wazuh\",telemetry_origin=\"synthetic_smoke\",ground_truth_label=\"test\"} |= \"$UID_TAG\"" \
       --data-urlencode "start=$start_ns" \
       --data-urlencode "end=$end_ns" \
       --data-urlencode 'limit=5')"

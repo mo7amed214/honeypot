@@ -9,6 +9,14 @@ This folder holds monitoring/detection configuration used by the demo environmen
 - `sysmon/` — Sysmon configuration artifacts
 - `systemd/` — systemd unit files used for pipeline watchdog/relays
 
+Promtail now also carries small normalized labels for downstream filtering:
+
+- `telemetry_origin`
+- `ground_truth_label`
+- `scenario_family`
+- `dataset_split`
+- `session_id`
+
 Notes:
 
 - The Compose monitoring stack is in [compose/docker-compose.monitoring.yml](../compose/docker-compose.monitoring.yml).
