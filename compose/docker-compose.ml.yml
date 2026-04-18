@@ -1,0 +1,16 @@
+services:
+  lstm-session-model:
+    build:
+      context: ..
+      dockerfile: ml/lstm_session/Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+    command:
+      - python
+      - -m
+      - ml.lstm_session.train
+      - --scenario-root
+      - artifacts/scenario-runs
+      - --output-dir
+      - ml/runs/latest
