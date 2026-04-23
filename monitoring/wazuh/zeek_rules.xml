@@ -115,7 +115,7 @@
 
   <rule id="100406" level="11">
     <if_sid>100404</if_sid>
-    <field name="win.eventdata.commandLine" type="pcre2">(?i)(?:ProgramData|Users\\\\[^\\\\]+\\\\AppData\\\\Local)\\\\Microsoft\\\\Diagnosis\\\\telemetry_sync_cache\.py</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i).*(?:ProgramData|Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\Microsoft\\\\Diagnosis(?:\\\\Downloads)?)\\\\telemetry_sync_cache\.py.*</field>
     <description>EWS staged OT manipulation tool executed: $(win.eventdata.commandLine)</description>
     <group>process,execution,endpoint,anomaly,ot_impact,ews,</group>
   </rule>

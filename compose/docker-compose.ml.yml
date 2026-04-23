@@ -1,11 +1,14 @@
 services:
   lstm-session-model:
+    image: honeypot-lstm-session:latest
     build:
       context: ..
       dockerfile: ml/lstm_session/Dockerfile
     working_dir: /workspace
     volumes:
       - ..:/workspace
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command:
       - python
       - -m
@@ -14,3 +17,17 @@ services:
       - artifacts/scenario-runs
       - --output-dir
       - ml/runs/latest
+  lstm-session-runtime:
+    image: honeypot-lstm-session:latest
+    build:
+      context: ..
+      dockerfile: ml/lstm_session/Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - sh
+      - -lc
+      - while true; do sleep 3600; done

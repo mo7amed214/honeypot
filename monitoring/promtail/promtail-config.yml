@@ -117,3 +117,65 @@ scrape_configs:
             - static_labels:
                 attack_stage: process_anomaly
                 asset_class: historian
+
+  - job_name: ml
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: ml
+          source: ml
+          __path__: /var/log/honeypot-ml/*.jsonl
+    pipeline_stages:
+      - json:
+          expressions:
+            ts: ts
+            kind: kind
+            model_name: model_name
+            session_id: session_id
+            split: split
+            event_count: event_count
+            total_event_count: total_event_count
+            is_full_session: is_full_session
+            stage_path: stage_path
+            asset_path: asset_path
+            predicted_danger_score: predicted_danger_score
+            predicted_danger_label: predicted_danger_label
+            predicted_dominant_stage: predicted_dominant_stage
+            predicted_session_intent: predicted_session_intent
+            predicted_session_intent_hybrid: predicted_session_intent_hybrid
+            predicted_priority: predicted_priority
+            danger_label: danger_label
+            dominant_stage: dominant_stage
+            thesis_readiness: thesis_readiness
+            thesis_readiness_score: thesis_readiness_score
+            verdict: verdict
+            summary_text: summary_text
+            total_examples: total_examples
+            unique_base_sessions: unique_base_sessions
+            full_session_examples: full_session_examples
+            unique_stage_paths: unique_stage_paths
+            unique_session_intents: unique_session_intents
+            benign_full_sessions: benign_full_sessions
+            attack_full_sessions: attack_full_sessions
+            eval_examples: eval_examples
+            eval_danger_label_accuracy: eval_danger_label_accuracy
+            eval_stage_accuracy: eval_stage_accuracy
+            eval_intent_accuracy: eval_intent_accuracy
+            eval_intent_accuracy_hybrid: eval_intent_accuracy_hybrid
+            eval_danger_mae: eval_danger_mae
+      - timestamp:
+          source: ts
+          format: RFC3339Nano
+      - labels:
+          kind:
+          model_name:
+          session_id:
+          split:
+          predicted_danger_label:
+          predicted_dominant_stage:
+          predicted_session_intent:
+          predicted_session_intent_hybrid:
+          predicted_priority:
+          thesis_readiness:
+          verdict:

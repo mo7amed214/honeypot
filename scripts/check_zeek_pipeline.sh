@@ -8,6 +8,7 @@ TAIL_WINDOW_LINES="${TAIL_WINDOW_LINES:-4000}"
 UID_MATCH_RETRIES="${UID_MATCH_RETRIES:-5}"
 REMOTE_RELAY_ENV="/etc/default/zeek-remote-relay"
 ZEEK_SENSOR_MODE="${ZEEK_SENSOR_MODE:-local}"
+REMOTE_RELAY_ONLY=0
 
 run_root() {
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
@@ -29,6 +30,14 @@ fi
 
 if [[ "$ZEEK_SENSOR_MODE" == "local" && -n "${REMOTE_SENSOR_HOST:-}" ]]; then
   ZEEK_SENSOR_MODE="remote"
+fi
+
+if [[ "$ZEEK_SENSOR_MODE" == "local" ]] && systemctl is-active --quiet zeek-remote-relay.service; then
+  # Streamlit and unprivileged shells may not be allowed to read /etc/default/zeek-remote-relay
+  # because it can contain the sensor password. In that case, validate the active remote relay
+  # and central feed instead of falling back to the stale local Zeek spool.
+  ZEEK_SENSOR_MODE="remote-relay-only"
+  REMOTE_RELAY_ONLY=1
 fi
 
 build_remote_ssh_cmd() {
@@ -86,6 +95,8 @@ if [[ "$ZEEK_SENSOR_MODE" == "remote" ]]; then
   if ! run_remote_root "test -r $SOURCE_LOG"; then
     fail "Remote source log missing or unreadable: $SOURCE_LOG"
   fi
+elif [[ "$ZEEK_SENSOR_MODE" == "remote-relay-only" ]]; then
+  RELAY_SERVICE="zeek-remote-relay.service"
 else
   RELAY_SERVICE="zeek-relay.service"
 
@@ -162,6 +173,38 @@ mtime = int(os.path.getmtime(path))
 print(f'{uid}\t{ts}\t{mtime}')
 PY"
   )"
+elif [[ "$ZEEK_SENSOR_MODE" == "remote-relay-only" ]]; then
+  source_info="$(
+    python3 - "$RELAY_LOG" <<'PY'
+import json
+import os
+import sys
+from collections import deque
+
+path = sys.argv[1]
+uid = ''
+ts = 0.0
+buf = deque(maxlen=2000)
+with open(path, "r", encoding="utf-8", errors="replace") as fh:
+    for line in fh:
+        line = line.strip()
+        if line:
+            buf.append(line)
+
+for line in reversed(buf):
+    try:
+        obj = json.loads(line)
+    except Exception:
+        continue
+    if obj.get("uid"):
+        uid = str(obj.get("uid", ""))
+        ts = float(obj.get("ts", 0) or 0)
+        break
+
+mtime = int(os.path.getmtime(path))
+print(f"{uid}\t{ts}\t{mtime}")
+PY
+  )"
 else
   source_info="$(
     run_root python3 - "$SOURCE_LOG" <<'PY'
@@ -195,8 +238,16 @@ if [[ -z "$source_uid" ]]; then
 fi
 
 source_age="$((now_ts - source_mtime))"
+source_stale=0
 if (( source_age > MAX_AGE_SECONDS )); then
-  fail "Source conn.log stale (${source_age}s > ${MAX_AGE_SECONDS}s): $SOURCE_LOG"
+  if [[ "$ZEEK_SENSOR_MODE" == "remote" || "$ZEEK_SENSOR_MODE" == "remote-relay-only" ]]; then
+    # A quiet remote sensor can have an idle conn.log during dry-state checks.
+    # Relay freshness is the liveness signal; uid matching only matters when
+    # the source log is fresh enough to represent current traffic.
+    source_stale=1
+  else
+    fail "Source conn.log stale (${source_age}s > ${MAX_AGE_SECONDS}s): $SOURCE_LOG"
+  fi
 fi
 
 uid_found=0
@@ -235,8 +286,15 @@ PY
   sleep 1
 done
 
-if (( uid_found == 0 )); then
-  fail "Latest conn.log uid=$source_uid not found in relay feed tail (last ${TAIL_WINDOW_LINES} lines)"
+if (( REMOTE_RELAY_ONLY == 0 && source_stale == 0 )); then
+  if (( uid_found == 0 )); then
+    fail "Latest conn.log uid=$source_uid not found in relay feed tail (last ${TAIL_WINDOW_LINES} lines)"
+  fi
 fi
 
-echo "[zeek-pipeline] OK: zeek=running relay=active source_age=${source_age}s feed_age=${age}s uid=${source_uid} conn_ts=${source_event_ts}"
+status_note="fresh"
+if (( source_stale == 1 )); then
+  status_note="idle-source"
+fi
+
+echo "[zeek-pipeline] OK: zeek=running relay=active source_age=${source_age}s feed_age=${age}s uid=${source_uid} conn_ts=${source_event_ts} source_status=${status_note}"

@@ -1,7 +1,7 @@
 # Session LSTM
 
-This directory contains a first-pass LSTM pipeline for the honeypot's labeled
-session data.
+This directory contains the LSTM-based session-correlation pipeline for the
+honeypot's labeled session data.
 
 What it does:
 
@@ -10,15 +10,20 @@ What it does:
 - expands each session into progressive prefixes so the model can learn attack
   buildup
 - trains a small LSTM to predict:
-  - `danger_score` from `0.0` to `1.0`
   - `danger_label` as `low`, `medium`, `high`, or `critical`
   - `dominant_stage` for the correlated session
+  - `session_intent` for the correlated session
+- publishes analyst-facing session summaries into `monitoring/ml/*.jsonl`
+- feeds those summaries into Loki and Grafana
 
 Important note:
 
-- the current dataset is still small
-- this model is a baseline for pipeline validation and feature plumbing, not a
-  final thesis-quality result yet
+- the session corpus can mix `live_sensor` captures with `curated_profile`
+  sessions when the lab network is unstable
+- the published dashboard view uses a hybrid session-intent layer:
+  - the LSTM provides the base prediction
+  - a small deterministic path refinement cleans up obvious SOC-facing edge
+    cases like `opcua_write -> ot_impact`
 
 Quick start:
 
@@ -28,12 +33,27 @@ bash scripts/train_lstm_session_model.sh
 
 That will build the ML container and train the model on the local artifacts.
 
+To regenerate the broader curated session corpus before training:
+
+```bash
+python3 scripts/generate_curated_ml_profiles.py
+```
+
+To run the full ML publish flow and refresh Grafana:
+
+```bash
+bash scripts/run_ml_pipeline.sh
+```
+
 Outputs:
 
 - `ml/runs/latest/metrics.json`
 - `ml/runs/latest/model.pt`
 - `ml/runs/latest/sessions.jsonl`
 - `ml/runs/latest/predictions.json`
+- `ml/runs/latest/eval_predictions.json`
+- `monitoring/ml/model_summary.jsonl`
+- `monitoring/ml/correlated_sessions.jsonl`
 
 Inference on one replay manifest:
 

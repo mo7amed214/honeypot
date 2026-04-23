@@ -15,3 +15,6 @@ Helper scripts intended to be run from the repository root.
 - `capture_benign_baseline.sh` — records a benign capture window and archives the resulting telemetry
 - `reset_lab_state.sh` — non-destructive cleanup for temp files and EWS MITM residue
 - `apply_ews_host_telemetry.sh` — applies EWS PowerShell logging and Wazuh eventchannel collection
+- `generate_ml_session_corpus.sh` — attempts a fully live labeled ML corpus build from the running lab
+- `generate_curated_ml_profiles.py` — writes curated labeled session manifests when you need broader ML coverage without depending on live network stability
+- `run_ml_pipeline.sh` — trains the LSTM, publishes ML summaries, restarts Promtail, and refreshes the Grafana ML row

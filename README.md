@@ -24,6 +24,12 @@ This repo contains a small ICS honeypot + SOC demo stack:
 docker compose -f compose/docker-compose.monitoring.yml up -d
 ```
 
+For the demo laptop, prefer the helper below because it also restores the SOC Grafana dashboard and starts Streamlit:
+
+```bash
+bash scripts/run_monitoring_stack.sh
+```
+
 Promtail is configured to read Wazuh alerts from:
 
 - `/var/lib/docker/volumes/single-node_wazuh_logs/_data/alerts`

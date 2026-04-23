@@ -32,6 +32,7 @@ services:
       - "${PROMTAIL_PORT:-9080}:9080"
     volumes:
       - /var/lib/docker/volumes/single-node_wazuh_logs/_data/alerts:/var/ossec/logs/alerts:ro
+      - ../monitoring/ml:/var/log/honeypot-ml:ro
       - ../monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
       - promtail_positions:/tmp
     depends_on:
