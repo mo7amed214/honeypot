@@ -1,0 +1,6 @@
+Level 3 Network Overview
+- Engineering Workstation used for validation and troubleshooting
+- Historian host collects line trends and exports
+- OPC UA telemetry source provides Line 2 live values
+- Flat subnet currently used for monitoring and maintenance access
+- SMB shares contain exports, handover notes, and support material

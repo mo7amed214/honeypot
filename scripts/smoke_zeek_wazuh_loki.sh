@@ -4,7 +4,7 @@ set -euo pipefail
 UID_TAG="SMOKE100302_$(date +%s)"
 FEED_LOG="/home/ceo/zeek_feed.log"
 MANAGER_CONTAINER="single-node-wazuh.manager-1"
-LOKI_URL="http://localhost:3100/loki/api/v1/query_range"
+LOKI_URL="${LOKI_URL:-http://localhost:3100/loki/api/v1/query_range}"
 TIMEOUT_SECONDS="${1:-25}"
 
 log() {

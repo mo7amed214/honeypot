@@ -4,6 +4,10 @@ Helper scripts intended to be run from the repository root.
 
 - `run_historian_stack.sh` — starts the local OPC UA server (if needed) and brings up historian compose
 - `run_streamlit_demo.sh` — runs the Streamlit demo on port 8501
+- `run_level35_ingress.sh` — brings up only the minimal Level 3.5 ingress target at `172.30.70.10:22`
+- `smoke_level35_ingress.sh` — proves SSH to the minimal Level 3 ingress target works
+- `run_wazuh_stack.sh` — starts the repo-owned Wazuh Manager/Indexer/Dashboard runtime
+- `install_ews_windows_box.sh` — installs/registers the large Windows EWS Vagrant box from a file, URL, or SSH source
 - `check_zeek_pipeline.sh` / `run_*zeek*` — pipeline utilities used by the demo environment
 - `smoke_zeek_wazuh_loki.sh` — injects a labeled smoke marker and verifies Wazuh/Loki ingestion
 - `zeek_remote_relay.sh` — tails a remote Zeek sensor `conn.log` over SSH and appends it into the local feed for Wazuh/Loki

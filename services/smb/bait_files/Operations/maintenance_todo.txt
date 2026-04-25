@@ -1,0 +1,6 @@
+Maintenance TODO
+- Inspect conveyor section B motor vibration
+- Check welding arm cooling fan performance
+- Review temperature alarms from last 24 hours
+- Verify OPC UA telemetry continuity after restart
+- Confirm historian logging retention for March batch

@@ -18,23 +18,27 @@ This repo contains a small ICS honeypot + SOC demo stack:
 
 ## Quick start (from repo root)
 
-### Monitoring plane (Grafana/Loki/Promtail)
+### Wazuh runtime
 
 ```bash
-docker compose -f compose/docker-compose.monitoring.yml up -d
+bash scripts/run_wazuh_stack.sh
 ```
 
-For the demo laptop, prefer the helper below because it also restores the SOC Grafana dashboard and starts Streamlit:
+This starts the reproducible Wazuh Manager/Indexer/Dashboard stack from this
+repo and generates local certificates if they are missing. It also opens the
+manager ports for lab agents from `192.168.1.0/24` by default. Override that
+with `WAZUH_AGENT_CIDR`, or set `WAZUH_CONFIGURE_FIREWALL=0` if you want to
+manage firewall rules yourself.
+
+### Monitoring plane (Grafana/Loki/Promtail/Streamlit)
 
 ```bash
 bash scripts/run_monitoring_stack.sh
 ```
 
-Promtail is configured to read Wazuh alerts from:
-
-- `/var/lib/docker/volumes/single-node_wazuh_logs/_data/alerts`
-
-If your Wazuh setup differs, update the bind mount in [compose/docker-compose.monitoring.yml](compose/docker-compose.monitoring.yml).
+The helper starts Loki, Promtail, Grafana, the historian API proxy, imports both
+Grafana dashboards, and starts Streamlit. Promtail auto-discovers the
+`single-node_wazuh_logs` Docker volume when Wazuh is running.
 
 ### Historian plane (web + ingest)
 
@@ -61,6 +65,74 @@ Default ports:
 - Loki: `http://localhost:3100`
 - Historian web: `http://localhost:5000`
 - Streamlit demo: `http://localhost:8501`
+
+## Reproducible VM lab (Vagrant)
+
+This repo now includes a Vagrant scaffold for a reproducible Level 3 lab.
+
+Default profile: `laptop1-safe`
+
+- `ews` at `192.168.56.5`
+- `smb` at `192.168.56.7`
+- `historian` at `192.168.56.10`
+- `opcua` at `192.168.56.11`
+- `zeek` at `192.168.56.13`
+
+Additional profiles:
+
+- `laptop1-bridge` for a near-live bridged replay of the real VirtualBox layout
+- `integration` for the clean `172.30.70.x` Level 3.5 contract
+
+Bring the lab up with:
+
+```bash
+bash scripts/run_vagrant_lab.sh
+```
+
+To switch profiles:
+
+```bash
+export HONEYPOT_VAGRANT_PROFILE=integration
+```
+
+Smoke test the Level 3 ingress contract with:
+
+```bash
+bash scripts/smoke_vagrant_lab.sh
+```
+
+Default lab credentials on the Vagrant-managed guests:
+
+- username: `john`
+- password: `Cisco`
+
+More detail is in [vagrant/README.md](vagrant/README.md).
+For a real Windows EWS instead of the Linux fallback, see
+[vagrant/windows_ews_box.md](vagrant/windows_ews_box.md).
+The Windows box is too large for normal git history; install it from a release,
+Git LFS object, shared artifact, or the Windows laptop with
+`bash scripts/install_ews_windows_box.sh`.
+The thesis host-by-host architecture is documented in
+[docs/thesis_honeypot_architecture.md](docs/thesis_honeypot_architecture.md).
+
+## Minimal Level 3.5 integration surface
+
+If you only need the first Level 3 pivot target for integration, use the
+minimal ingress contract instead of the full lab:
+
+```bash
+bash scripts/run_level35_ingress.sh
+bash scripts/smoke_level35_ingress.sh
+```
+
+That provides:
+
+- host: `172.30.70.10`
+- port: `22`
+- login: `john / Cisco`
+- role: Level 3 `EWS` / operator workstation
+
+More detail is in [integrations/level35/README.md](integrations/level35/README.md).
 
 ## Operations helpers
 

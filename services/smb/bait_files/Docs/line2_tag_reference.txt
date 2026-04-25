@@ -1,0 +1,11 @@
+Line 2 Tag Reference
+- Line2.ConveyorSpeed
+- Line2.RobotTemp
+- Line2.WeldCycleDelay
+- Line2.LineState
+- Line2.AlarmActive
+- Line2.SectionB.Vibration
+- Line2.Cell1.PowerDraw
+
+Notes:
+Primary validation tags remain ConveyorSpeed, RobotTemp, and LineState.

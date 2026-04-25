@@ -1,0 +1,6 @@
+Incident Handover - Line 2
+Date: 2026-03-29
+- Brief temperature anomaly observed during early shift
+- No confirmed production halt
+- Continue monitoring conveyor speed and robot temp trend
+- Recheck historian values after next restart window

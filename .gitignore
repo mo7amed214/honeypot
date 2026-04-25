@@ -44,9 +44,14 @@ ml/checkpoints/
 # Legacy / scratch folders from local runs
 historian_service/
 .wazuh-backups/
+monitoring/wazuh/runtime/config/wazuh_indexer_ssl_certs/
 .tmp_historian_debs/
 .tmp_historian_images/
 .tmp_samba_debs/
+.vagrant/
+.vagrant-*/
+vagrant/boxes/*.box
+vagrant/boxes/*.sha256
 
 # Vendored build outputs
 open62541/build/

@@ -1,0 +1,9 @@
+Historian Access Notes
+Portal: http://192.168.1.9:5000/portal
+Usage:
+- Compare Line 2 trend values after restart
+- Validate ConveyorSpeed and RobotTemp against live tags
+- Review export before shift handover
+
+Comment:
+If historian values drift from live OPC UA telemetry, capture screenshot and notify maintenance.

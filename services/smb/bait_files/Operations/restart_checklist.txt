@@ -1,0 +1,7 @@
+Restart Validation Checklist - Line 2
+- Confirm historian dashboard is reachable
+- Verify LineState returns RUN after restart
+- Check ConveyorSpeed trend updates
+- Check RobotTemp trend updates
+- Confirm OPC UA telemetry values match historian for 10 minutes
+- Do not leave validation mode enabled after checks

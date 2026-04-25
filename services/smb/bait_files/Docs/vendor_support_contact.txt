@@ -1,0 +1,10 @@
+Vendor Support Contact
+Integrator: Delta Industrial Systems
+Support Window: 08:00-17:00
+Escalation:
+- historian ingestion mismatch
+- missing OPC UA updates after restart
+- line trend drift compared to shift log
+
+Internal note:
+Collect trend export and tag snapshot before opening support ticket.

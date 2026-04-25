@@ -1,0 +1,6 @@
+Timestamp,Line2.ConveyorSpeed,Line2.RobotTemp,Line2.WeldCycleDelay,Line2.LineState,Line2.AlarmActive
+2026-03-29 07:00:00,1.10,69.8,0.8,RUN,0
+2026-03-29 07:05:00,1.20,70.6,0.8,RUN,0
+2026-03-29 07:10:00,1.20,71.4,0.8,RUN,0
+2026-03-29 07:15:00,1.15,70.9,0.9,RUN,0
+2026-03-29 07:20:00,1.10,72.1,0.9,RUN,0

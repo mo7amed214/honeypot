@@ -3,7 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-docker compose -f "$ROOT_DIR/compose/docker-compose.monitoring.yml" up -d grafana
+if [[ -z "${WAZUH_ALERTS_PATH:-}" ]]; then
+  if volume_path="$(docker volume inspect single-node_wazuh_logs --format '{{ .Mountpoint }}' 2>/dev/null)"; then
+    export WAZUH_ALERTS_PATH="$volume_path/alerts"
+  fi
+fi
+
+docker compose -f "$ROOT_DIR/compose/docker-compose.monitoring.yml" up -d loki promtail grafana
 
 if ! ss -ltn | grep -q ':5001 '; then
   setsid -f python3 "$ROOT_DIR/scripts/historian_api_proxy.py" \

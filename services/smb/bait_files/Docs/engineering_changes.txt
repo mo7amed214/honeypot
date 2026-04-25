@@ -1,0 +1,5 @@
+Engineering Change Notes
+- Added Line2.RobotTemp and Line2.WeldCycleDelay to export set
+- Updated historian label mapping for Line 2 view
+- Temporary validation mode used after restart event on 2026-03-29
+- Pending review for alarm threshold tuning on welding cell

@@ -1,0 +1,6 @@
+Timestamp,Operator,Event,Comment
+2026-03-29 04:58:00,ShiftA,TEMP_WARN,Warning observed on welding cell
+2026-03-29 05:11:00,ShiftA,CONVEYOR_DELAY,Section B movement slower than usual
+2026-03-29 05:31:00,ShiftA,RESET,Alarm cleared after manual reset
+2026-03-29 05:36:00,ShiftA,RESUME,Line resumed normal run
+2026-03-29 06:05:00,ShiftA,MONITOR,Watching historian trend for recurrence

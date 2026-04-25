@@ -17,6 +17,11 @@ ARCHIVE_TIMEOUT_SECONDS="${ARCHIVE_TIMEOUT_SECONDS:-60}"
 run_root() {
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "$@"
+  elif sudo -n true 2>/dev/null; then
+    sudo "$@"
+  elif [[ -n "${SUDO_PASSWORD:-}" ]]; then
+    printf '%s\n' "$SUDO_PASSWORD" | sudo -S -p '' -v
+    sudo -n "$@"
   else
     sudo "$@"
   fi
@@ -168,7 +173,7 @@ import subprocess
 import sys
 
 url, start_ns, end_ns = sys.argv[1:4]
-rules = ["100301", "100304", "100405"]
+rules = ["100301", "100305", "100405"]
 results = {}
 
 for rule_id in rules:

@@ -20,4 +20,6 @@ Promtail now also carries small normalized labels for downstream filtering:
 Notes:
 
 - The Compose monitoring stack is in [compose/docker-compose.monitoring.yml](../compose/docker-compose.monitoring.yml).
-- Wazuh Manager/Indexer/Dashboard are not started by this repo’s monitoring compose; the stack expects Wazuh alerts to already exist on the host (Promtail bind-mount).
+- Wazuh Manager/Indexer/Dashboard can be started from this repo with `bash scripts/run_wazuh_stack.sh`.
+- The Wazuh runtime config lives under `monitoring/wazuh/runtime/config/`; generated certificates are intentionally ignored and regenerated locally.
+- Promtail reads the Wazuh alerts volume and forwards Wazuh labels into Loki for the SOC dashboard.
