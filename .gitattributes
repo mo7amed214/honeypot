@@ -1,0 +1,4 @@
+vagrant/boxes/*.box filter=lfs diff=lfs merge=lfs -text
+vagrant/boxes/*.ova filter=lfs diff=lfs merge=lfs -text
+vagrant/boxes/*.ovf filter=lfs diff=lfs merge=lfs -text
+vagrant/boxes/*.vmdk filter=lfs diff=lfs merge=lfs -text
