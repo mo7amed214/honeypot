@@ -15,11 +15,13 @@ services:
     build: ../services/opcua
     networks: [ot-net]
     restart: unless-stopped
+    mem_limit: 256m
 
   smb:
     build: ../services/smb
     network_mode: host
     restart: unless-stopped
+    mem_limit: 128m
 
   # ── Historian ────────────────────────────────────────────────────────────────
 
@@ -42,6 +44,7 @@ services:
       - ../services/historian/logs:/var/log/historian
     networks: [ot-net]
     restart: unless-stopped
+    mem_limit: 256m
 
   historian-ingest:
     build:
@@ -61,11 +64,14 @@ services:
     depends_on: [opcua]
     networks: [ot-net]
     restart: unless-stopped
+    mem_limit: 128m
 
-  # ── Monitoring ───────────────────────────────────────────────────────────────
+  # ── Monitoring (optional) ────────────────────────────────────────────────────
+  # Start with: docker compose --profile monitoring up -d
 
   grafana:
     image: grafana/grafana:latest
+    profiles: [monitoring]
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     environment:
@@ -76,9 +82,11 @@ services:
       - grafana_data:/var/lib/grafana
     networks: [ot-net]
     restart: unless-stopped
+    mem_limit: 256m
 
   loki:
     image: grafana/loki:2.9.8
+    profiles: [monitoring]
     command: -config.file=/etc/loki/local-config.yaml
     ports:
       - "${LOKI_PORT:-3100}:3100"
@@ -87,9 +95,11 @@ services:
       - loki_data:/loki
     networks: [ot-net]
     restart: unless-stopped
+    mem_limit: 256m
 
   promtail:
     image: grafana/promtail:2.9.8
+    profiles: [monitoring]
     command: -config.file=/etc/promtail/config.yml
     volumes:
       - ../monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
@@ -97,16 +107,19 @@ services:
     depends_on: [loki]
     networks: [ot-net]
     restart: unless-stopped
+    mem_limit: 128m
 
-  # ── Network Monitoring ───────────────────────────────────────────────────────
+  # ── Network Monitoring (optional) ────────────────────────────────────────────
   # network_mode: host lets Zeek see the Docker bridge interface (br-ot-net)
   # and all inter-container traffic flowing across it.
 
   zeek:
     image: zeek/zeek:latest
+    profiles: [monitoring]
     network_mode: host
     cap_add: [NET_RAW, NET_ADMIN]
     volumes:
       - ../monitoring/zeek:/opt/zeek/share/zeek/site:ro
       - ../services/historian/logs:/var/log/honeypot:ro
     restart: unless-stopped
+    mem_limit: 256m

@@ -20,6 +20,8 @@ SAFE_OPCUA_MEMORY = ENV.fetch("HONEYPOT_SAFE_OPCUA_MEMORY", "1536").to_i
 SAFE_OPCUA_CPUS = ENV.fetch("HONEYPOT_SAFE_OPCUA_CPUS", "1").to_i
 SAFE_ZEEK_MEMORY = ENV.fetch("HONEYPOT_SAFE_ZEEK_MEMORY", "1536").to_i
 SAFE_ZEEK_CPUS = ENV.fetch("HONEYPOT_SAFE_ZEEK_CPUS", "1").to_i
+EWS_ONLY_MEMORY = ENV.fetch("HONEYPOT_EWS_ONLY_MEMORY", "2048").to_i
+EWS_ONLY_CPUS = ENV.fetch("HONEYPOT_EWS_ONLY_CPUS", "2").to_i
 
 if EWS_MODE == "windows" && EWS_WINDOWS_BOX.strip.empty?
   raise "Register a Windows 11 box first, then set HONEYPOT_EWS_BOX or use the default honeypot/ews-win11-local"
@@ -146,8 +148,8 @@ PROFILE_MACHINES = {
         hostname: "EWS-WIN11",
         vm_name: "EWS-containers",
         ip: "#{SAFE_NET_PREFIX}.5",
-        memory: EWS_MODE == "windows" ? EWS_WINDOWS_SAFE_MEMORY : 4096,
-        cpus: EWS_MODE == "windows" ? EWS_WINDOWS_SAFE_CPUS : 3,
+        memory: EWS_MODE == "windows" ? EWS_WINDOWS_SAFE_MEMORY : EWS_ONLY_MEMORY,
+        cpus: EWS_MODE == "windows" ? EWS_WINDOWS_SAFE_CPUS : EWS_ONLY_CPUS,
         role: "ews",
         promisc_policy: "allow-all",
         nic_type: "82540EM",
