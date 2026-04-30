@@ -138,6 +138,22 @@ PROFILE_MACHINES = {
       },
     },
   },
+  "ews-only" => {
+    description: "Single EWS VM running all other Level 3 services as Docker containers.",
+    network: :private,
+    machines: {
+      "ews" => {
+        hostname: "EWS-WIN11",
+        vm_name: "EWS-containers",
+        ip: "#{SAFE_NET_PREFIX}.5",
+        memory: EWS_MODE == "windows" ? EWS_WINDOWS_SAFE_MEMORY : 4096,
+        cpus: EWS_MODE == "windows" ? EWS_WINDOWS_SAFE_CPUS : 3,
+        role: "ews",
+        promisc_policy: "allow-all",
+        nic_type: "82540EM",
+      },
+    },
+  },
   "integration" => {
     description: "Clean integration-only surface on 172.30.70.0/24.",
     network: :private,
@@ -279,6 +295,12 @@ Vagrant.configure("2") do |config|
           },
           args: [LEVEL3_USER, LEVEL3_PASSWORD],
           privileged: true
+      elsif name == "ews" && PROFILE == "ews-only" && EWS_MODE != "windows"
+        node.vm.provision "shell", path: "vagrant/provision/common.sh", args: [LEVEL3_USER]
+        node.vm.provision "shell",
+          env: { "LEVEL3_PASSWORD" => LEVEL3_PASSWORD },
+          path: "vagrant/provision/ews_with_containers.sh",
+          args: [LEVEL3_USER]
       elsif name == "ews" && PROFILE == "integration" && EWS_MODE != "windows"
         node.vm.provision "shell",
           env: {

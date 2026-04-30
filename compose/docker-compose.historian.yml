@@ -30,7 +30,7 @@ services:
       SERVICE_NAME: ${HISTORIAN_INGEST_SERVICE_NAME:-historian_ingest}
       DB_PATH: /data/historian.db
       EVENT_LOG_PATH: /var/log/historian/ingest.jsonl
-      OPCUA_URL: ${OPCUA_URL:-opc.tcp://192.168.1.11:4840}
+      OPCUA_URL: ${OPCUA_URL:-opc.tcp://opcua:4840}
       NAMESPACE: ${OPCUA_NAMESPACE:-http://manufacturing.example/opcua}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-1.0}
     extra_hosts:
