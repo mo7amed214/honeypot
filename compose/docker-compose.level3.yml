@@ -13,6 +13,8 @@ services:
 
   opcua:
     build: ../services/opcua
+    ports:
+      - "4840:4840"
     networks: [ot-net]
     restart: unless-stopped
     mem_limit: 256m
