@@ -3,6 +3,8 @@
 set -euo pipefail
 
 LEVEL3_USER="${1:-john}"
+ENABLE_INTEGRATION_NIC="${HONEYPOT_ENABLE_INTEGRATION_NIC:-0}"
+INTEGRATION_IP="${HONEYPOT_INTEGRATION_IP:-}"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -14,8 +16,29 @@ fi
 # Allow the honeypot user to run docker without sudo
 usermod -aG docker "${LEVEL3_USER}"
 
+# If a second NIC exists for the integration plane, configure its static IP via
+# netplan. Vagrant adds the NIC but doesn't configure it inside the guest when
+# using Ubuntu 22.04 with a custom provision script.
+if [[ "$ENABLE_INTEGRATION_NIC" == "1" && -n "$INTEGRATION_IP" ]]; then
+  INTEGRATION_IFACE="$(ip -o link show | awk -F': ' '$2 != "lo" {print $2}' | tail -n1)"
+  if [[ -n "$INTEGRATION_IFACE" ]]; then
+    cat > /etc/netplan/60-integration.yaml <<EOF
+network:
+  version: 2
+  ethernets:
+    ${INTEGRATION_IFACE}:
+      addresses: [${INTEGRATION_IP}/24]
+EOF
+    netplan apply 2>/dev/null || true
+  fi
+fi
+
+# Create Zeek log dir so the bind-mount in docker-compose doesn't fail
+mkdir -p /var/log/zeek
+
 # Pull images and build services in the background so vagrant up returns quickly.
 # The containers start automatically on boot via restart: unless-stopped.
 docker compose \
   -f /opt/honeypot/compose/docker-compose.level3.yml \
+  --profile monitoring \
   up -d --build

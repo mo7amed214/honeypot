@@ -123,5 +123,18 @@ services:
     volumes:
       - ../monitoring/zeek:/opt/zeek/share/zeek/site:ro
       - ../services/historian/logs:/var/log/honeypot:ro
+      - /var/log/zeek:/opt/zeek/spool/zeek
+    entrypoint: []
+    command: >-
+      sh -c '
+        iface=$$(ip -o -4 addr show |
+          awk "$$4 !~ /^10[.]0[.]2[.]/ && $$2 != \"lo\" && $$2 !~ /^(docker|br-|veth)/ { sub(/\/.*/, \"\", $$4); print $$2; exit }");
+        iface=$${iface:-eth0};
+        mkdir -p /opt/zeek/spool/zeek;
+        cd /opt/zeek/spool/zeek;
+        exec zeek -C -i "$$iface"
+          /opt/zeek/share/zeek/site/discovery_scan_detect.zeek
+          /opt/zeek/share/zeek/site/opcua_write_detect.zeek
+      '
     restart: unless-stopped
     mem_limit: 256m

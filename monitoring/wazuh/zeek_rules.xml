@@ -9,26 +9,20 @@
 
   <rule id="100301" level="8">
     <if_sid>100300</if_sid>
-    <field name="id.orig_h" type="pcre2">^192[.]168[.]1[.](5|6|9|10|11)$</field>
-    <field name="id.resp_h" type="pcre2">^192[.]168[.]1[.](9|10)$</field>
     <field name="id.resp_p">5000</field>
-    <description>Zeek host-to-historian web connection observed.</description>
-    <group>zeek,network,</group>
+    <description>Zeek historian web connection observed.</description>
+    <group>zeek,network,historian,</group>
   </rule>
 
   <rule id="100302" level="8">
     <if_sid>100300</if_sid>
-    <field name="id.orig_h" type="pcre2">^192[.]168[.]1[.](5|6|9|10|11)$</field>
-    <field name="id.resp_h" type="pcre2">^192[.]168[.]1[.](7|9)$</field>
     <field name="id.resp_p">445</field>
-    <description>Zeek host-to-historian SMB connection observed.</description>
-    <group>zeek,network,</group>
+    <description>Zeek SMB connection observed.</description>
+    <group>zeek,network,smb,</group>
   </rule>
 
   <rule id="100306" level="8">
     <decoded_as>json</decoded_as>
-    <field name="id.orig_h" type="pcre2">^192[.]168[.]1[.](5|6|9|10|11)$</field>
-    <field name="id.resp_h" type="pcre2">^192[.]168[.]1[.](7|9)$</field>
     <field name="id.resp_p">445</field>
     <field name="path" type="pcre2">.+</field>
     <description>Zeek SMB share or file activity observed.</description>
@@ -37,11 +31,9 @@
 
   <rule id="100303" level="7">
     <if_sid>100300</if_sid>
-    <field name="id.orig_h" type="pcre2">^192[.]168[.]1[.](5|9)$</field>
-    <field name="id.resp_h" type="pcre2">^192[.]168[.]1[.](6|11)$</field>
     <field name="id.resp_p">4840</field>
-    <description>Zeek OPC UA traffic from EWS/historian toward OPC UA server observed.</description>
-    <group>zeek,network,</group>
+    <description>Zeek OPC UA connection observed.</description>
+    <group>zeek,network,opcua,</group>
   </rule>
 
   <rule id="100307" level="9">

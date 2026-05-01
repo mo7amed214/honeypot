@@ -14,7 +14,7 @@ docker compose -f "$ROOT_DIR/compose/docker-compose.monitoring.yml" up -d loki p
 if ! ss -ltn | grep -q ':5001 '; then
   setsid -f python3 "$ROOT_DIR/scripts/historian_api_proxy.py" \
     --port 5001 \
-    --upstream "${HISTORIAN_PROXY_UPSTREAM:-http://192.168.1.10:5000}" \
+    --upstream "${HISTORIAN_PROXY_UPSTREAM:-http://${HISTORIAN_HOST:-192.168.1.10}:5000}" \
     > /tmp/historian_api_proxy.log 2>&1
 fi
 

@@ -300,7 +300,11 @@ Vagrant.configure("2") do |config|
       elsif name == "ews" && PROFILE == "ews-only" && EWS_MODE != "windows"
         node.vm.provision "shell", path: "vagrant/provision/common.sh", args: [LEVEL3_USER]
         node.vm.provision "shell",
-          env: { "LEVEL3_PASSWORD" => LEVEL3_PASSWORD },
+          env: {
+            "LEVEL3_PASSWORD" => LEVEL3_PASSWORD,
+            "HONEYPOT_ENABLE_INTEGRATION_NIC" => ENABLE_INTEGRATION_NIC ? "1" : "0",
+            "HONEYPOT_INTEGRATION_IP" => ENABLE_INTEGRATION_NIC ? "#{INTEGRATION_NET_PREFIX}.#{INTEGRATION_IP_SUFFIX.fetch('ews')}" : "",
+          },
           path: "vagrant/provision/ews_with_containers.sh",
           args: [LEVEL3_USER]
       elsif name == "ews" && PROFILE == "integration" && EWS_MODE != "windows"
