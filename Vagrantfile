@@ -237,7 +237,11 @@ Vagrant.configure("2") do |config|
     config.vm.define name do |node|
       node.vm.hostname = spec[:hostname]
 
-      if profile_spec[:network] == :public
+      if PROFILE == "integration"
+        node.vm.network "private_network",
+          ip: spec[:ip],
+          virtualbox__intnet: "l3_ops_net"
+      elsif profile_spec[:network] == :public
         node.vm.network "public_network", bridge: BRIDGE_IFACE, ip: spec[:ip]
       else
         node.vm.network "private_network", ip: spec[:ip]
@@ -245,7 +249,9 @@ Vagrant.configure("2") do |config|
 
       if PROFILE != "integration" && ENABLE_INTEGRATION_NIC
         integration_suffix = INTEGRATION_IP_SUFFIX.fetch(name)
-        node.vm.network "private_network", ip: "#{INTEGRATION_NET_PREFIX}.#{integration_suffix}"
+        node.vm.network "private_network",
+          ip: "#{INTEGRATION_NET_PREFIX}.#{integration_suffix}",
+          virtualbox__intnet: "l3_ops_net"
       end
 
       if name == "ews" && EWS_MODE == "windows"
@@ -312,6 +318,8 @@ Vagrant.configure("2") do |config|
           env: {
             "LEVEL3_PASSWORD" => LEVEL3_PASSWORD,
             "HONEYPOT_EWS_SERVICE_IP" => spec[:ip],
+            "HONEYPOT_OT_CORE_L3_IP" => ENV.fetch("HONEYPOT_OT_CORE_L3_IP", "172.30.70.1"),
+            "HONEYPOT_DECOY_SUBNET" => ENV.fetch("HONEYPOT_DECOY_SUBNET", "172.30.40.0/24"),
           },
           path: "vagrant/provision/ews_ingress_minimal.sh",
           args: [LEVEL3_USER]

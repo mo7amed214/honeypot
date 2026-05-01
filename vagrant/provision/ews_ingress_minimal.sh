@@ -5,6 +5,11 @@ USERNAME="${1:-john}"
 PASSWORD="${LEVEL3_PASSWORD:-Cisco}"
 TARGET_IP="${HONEYPOT_EWS_SERVICE_IP:-172.30.70.10}"
 
+EWS_INTEGRATION_IP="${HONEYPOT_EWS_SERVICE_IP:-172.30.70.10}"
+OT_CORE_L3_IP="${HONEYPOT_OT_CORE_L3_IP:-172.30.70.1}"
+DECOY_SUBNET="${HONEYPOT_DECOY_SUBNET:-172.30.40.0/24}"
+EWS_IFACE="${HONEYPOT_EWS_INTEGRATION_IFACE:-eth1}"
+
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
@@ -51,5 +56,23 @@ Fixed login: ${USERNAME} / ${PASSWORD}
 Stable SSH target: ${TARGET_IP}:22
 EOF
 chown "${USERNAME}:${USERNAME}" "/home/${USERNAME}/LEVEL3_CONTRACT.txt"
+
+cat >/etc/netplan/70-level3-ingress-routes.yaml <<'EOF'
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth1:
+      dhcp4: false
+      addresses:
+        - 172.30.70.10/24
+      routes:
+        - to: 172.30.40.0/24
+          via: 172.30.70.1
+EOF
+
+netplan generate
+netplan apply
+
 
 systemctl restart ssh
