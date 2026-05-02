@@ -9,6 +9,7 @@ EWS_INTEGRATION_IP="${HONEYPOT_EWS_SERVICE_IP:-172.30.70.10}"
 OT_CORE_L3_IP="${HONEYPOT_OT_CORE_L3_IP:-172.30.70.1}"
 DECOY_SUBNET="${HONEYPOT_DECOY_SUBNET:-172.30.40.0/24}"
 EWS_IFACE="${HONEYPOT_EWS_INTEGRATION_IFACE:-eth1}"
+HOSTNAME="level3-ews"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -16,6 +17,8 @@ apt-get update
 apt-get install -y \
   openssh-server \
   sudo
+
+hostnamectl set-hostname "$HOSTNAME"
 
 mkdir -p /var/run/sshd
 systemctl enable ssh
@@ -57,18 +60,18 @@ Stable SSH target: ${TARGET_IP}:22
 EOF
 chown "${USERNAME}:${USERNAME}" "/home/${USERNAME}/LEVEL3_CONTRACT.txt"
 
-cat >/etc/netplan/70-level3-ingress-routes.yaml <<'EOF'
+cat >/etc/netplan/70-level3-ingress-routes.yaml <<EOF
 network:
   version: 2
   renderer: networkd
   ethernets:
-    eth1:
+    ${EWS_IFACE}:
       dhcp4: false
       addresses:
-        - 172.30.70.10/24
+        - ${EWS_INTEGRATION_IP}/24
       routes:
-        - to: 172.30.40.0/24
-          via: 172.30.70.1
+        - to: ${DECOY_SUBNET}
+          via: ${OT_CORE_L3_IP}
 EOF
 
 netplan generate
