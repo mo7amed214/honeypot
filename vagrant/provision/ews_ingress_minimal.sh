@@ -77,5 +77,16 @@ EOF
 netplan generate
 netplan apply
 
+TEST_DECOY_IP="${HONEYPOT_TEST_DECOY_IP:-172.30.40.31}"
+
+if ! ip route get "${TEST_DECOY_IP}" | grep -q "via ${OT_CORE_L3_IP} dev ${EWS_IFACE}"; then
+  echo "ERROR: EWS return route to ${DECOY_SUBNET} was not installed correctly"
+  echo "Expected: ${TEST_DECOY_IP} via ${OT_CORE_L3_IP} dev ${EWS_IFACE}"
+  echo
+  ip route
+  echo
+  ip route get "${TEST_DECOY_IP}" || true
+  exit 1
+fi
 
 systemctl restart ssh
