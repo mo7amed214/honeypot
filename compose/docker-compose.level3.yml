@@ -1,5 +1,7 @@
 networks:
   ot-net:
+  l2_l3_integration:
+    external: true
 
 volumes:
   historian_data:
@@ -60,11 +62,12 @@ services:
       OPCUA_URL: ${OPCUA_URL:-opc.tcp://opcua:4840}
       NAMESPACE: ${OPCUA_NAMESPACE:-http://manufacturing.example/opcua}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-1.0}
+      SCADA_L2_URL: ${SCADA_L2_URL:-http://level2_scada:8080}
     volumes:
       - historian_data:/data
       - ../services/historian/logs:/var/log/historian
     depends_on: [opcua]
-    networks: [ot-net]
+    networks: [ot-net, l2_l3_integration]
     restart: unless-stopped
     mem_limit: 128m
 

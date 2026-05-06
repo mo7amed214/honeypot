@@ -7,3 +7,9 @@ Usage:
 
 Comment:
 If historian values drift from live OPC UA telemetry, capture screenshot and notify maintenance.
+
+SCADA Integration (Level 2 supervisory):
+  Data endpoint:    http://172.30.60.1:8080/api/data
+  Control endpoint: http://172.30.60.1:8080/api/control
+  Health check:     http://172.30.60.1:8080/api/health
+Note: Level 2 SCADA accessible via engineering LAN. No auth required on control endpoint.

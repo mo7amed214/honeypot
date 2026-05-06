@@ -15,6 +15,8 @@ export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
 apt-get install -y \
+  ca-certificates \
+  curl \
   openssh-server \
   sudo
 
@@ -90,3 +92,32 @@ if ! ip route get "${TEST_DECOY_IP}" | grep -q "via ${OT_CORE_L3_IP} dev ${EWS_I
 fi
 
 systemctl restart ssh
+
+# ── Docker Engine ────────────────────────────────────────────────────────────
+if ! command -v docker &>/dev/null; then
+  curl -fsSL https://get.docker.com | sh
+fi
+usermod -aG docker "$USERNAME"
+
+# ── Shared integration bridge ────────────────────────────────────────────────
+docker network create l2_l3_integration 2>/dev/null || true
+
+# ── Level 2 (PERA) containers ───────────────────────────────────────────────
+# cd to PERA root so relative build contexts (./physics, ./blue_team/ingest)
+# resolve correctly in both the main and overlay compose files.
+mkdir -p /var/log/pera
+cd /opt/pera
+docker compose \
+  -f docker-compose.yml \
+  -f blue_team/docker-compose.blueteam.yml \
+  up -d --build
+
+# ── Level 3 containers ───────────────────────────────────────────────────────
+# Monitoring profile is intentionally omitted: PERA's blue team stack
+# (bt_grafana, bt_aiis, influxdb) is the SOC console for this integration.
+# Level 3 grafana/loki/promtail/zeek would conflict on ports 3000/3100.
+mkdir -p /var/log/zeek
+cd /opt/honeypot
+docker compose \
+  -f compose/docker-compose.level3.yml \
+  up -d --build

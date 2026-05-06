@@ -1,7 +1,9 @@
 import asyncio
+import json
 import os
 import random
 import sqlite3
+import urllib.request
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse
@@ -16,6 +18,7 @@ except ModuleNotFoundError as exc:
 from event_logger import emit_event
 
 DB_PATH = os.getenv("DB_PATH", "historian.db")
+SCADA_L2_URL = os.getenv("SCADA_L2_URL", "")
 OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840")
 NAMESPACE = os.getenv("NAMESPACE", "http://manufacturing.example/opcua")
 POLL_INTERVAL_SECONDS = float(os.getenv("POLL_INTERVAL_SECONDS", "3.0"))
@@ -36,6 +39,83 @@ TAGS = {
     "plant_power_kw": {"path": "plant_power_kw", "min": 80.0, "max": 280.0, "max_step": 20.0},
     "cooling_water_temp_c": {"path": "cooling_water_temp_c", "min": 10.0, "max": 40.0, "max_step": 2.0},
 }
+
+
+# PERA Level 2 physics keys → Level 3 historian tag names
+L2_TAG_MAP: Dict[str, str] = {
+    "node04_measured_rpm":    "line1_conveyor_speed_mpm",
+    "node06_measured_temp":   "weld_cell_temperature_c",
+    "node08_measured_pressure": "air_pressure_bar",
+    "node09_measured_level":  "weld_wire_feed_speed_mmin",
+    "node10_defect_prob":     "pkg_reject_count",
+    "node15_ambient_temp":    "cooling_water_temp_c",
+}
+
+
+def _http_get_json(url: str) -> dict:
+    with urllib.request.urlopen(url, timeout=5) as resp:
+        return json.loads(resp.read())
+
+
+def _get_latest_opcua(conn: sqlite3.Connection, tag: str) -> Optional[float]:
+    row = conn.execute(
+        "SELECT value FROM telemetry WHERE tag=? AND source='OPCUA' ORDER BY id DESC LIMIT 1",
+        (tag,),
+    ).fetchone()
+    return float(row[0]) if row else None
+
+
+async def scada_l2_poll(conn: sqlite3.Connection) -> None:
+    if not SCADA_L2_URL:
+        return
+    data_url = f"{SCADA_L2_URL}/api/data"
+    print(f"[l2_poll] starting → {data_url}")
+    emit_event(
+        event_type="l2_poll_start",
+        src_ip=SCADA_L2_URL,
+        route="scada_l2_poll",
+        status="starting",
+        extra={"url": data_url},
+    )
+    while True:
+        try:
+            data = await asyncio.to_thread(_http_get_json, data_url)
+            ts = utc_now_iso()
+            rows = []
+            for l2_key, l3_tag in L2_TAG_MAP.items():
+                raw = data.get(l2_key)
+                if raw is None:
+                    continue
+                value = float(raw)
+                rows.append((l3_tag, ts, value, "Good", "SCADA_L2"))
+                opcua_val = _get_latest_opcua(conn, l3_tag)
+                if opcua_val is not None and opcua_val != 0.0:
+                    deviation = abs(value - opcua_val) / abs(opcua_val)
+                    if deviation > 0.20:
+                        emit_event(
+                            event_type="cross_level_mismatch",
+                            route="scada_l2_poll",
+                            tag=l3_tag,
+                            status="medium",
+                            extra={
+                                "l2_value": round(value, 4),
+                                "opcua_value": round(opcua_val, 4),
+                                "deviation_pct": round(deviation * 100, 1),
+                                "l2_key": l2_key,
+                            },
+                        )
+            if rows:
+                write_batch(conn, rows)
+            print(f"[l2_poll] {ts} wrote {len(rows)} tags from SCADA L2")
+        except Exception as exc:
+            print(f"[l2_poll] error: {exc}")
+            emit_event(
+                event_type="l2_poll_error",
+                route="scada_l2_poll",
+                status="error",
+                extra={"error": str(exc), "url": data_url},
+            )
+        await asyncio.sleep(5.0)
 
 
 def opcua_target_host(url: str) -> str:
@@ -255,9 +335,20 @@ async def main():
             retry_delay = min(15.0, retry_delay + 1.5)
 
 
+async def _run_all(l2_conn: sqlite3.Connection) -> None:
+    await asyncio.gather(main(), scada_l2_poll(l2_conn))
+
+
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        if SCADA_L2_URL:
+            l2_conn = sqlite3.connect(DB_PATH, timeout=10)
+            l2_conn.execute("PRAGMA journal_mode=WAL")
+            l2_conn.execute("PRAGMA busy_timeout=10000")
+            ensure_schema(l2_conn)
+            asyncio.run(_run_all(l2_conn))
+        else:
+            asyncio.run(main())
     except KeyboardInterrupt:
         print("[ingest] stopped")
         emit_event(event_type="ingest_stop", route="opcua_ingest", status="stopped")
