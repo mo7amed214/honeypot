@@ -73,13 +73,23 @@ network:
         - to: ${DECOY_SUBNET}
           via: ${OT_CORE_L3_IP}
 EOF
+chmod 0600 /etc/netplan/70-level3-ingress-routes.yaml
 
 netplan generate
 netplan apply
 
 TEST_DECOY_IP="${HONEYPOT_TEST_DECOY_IP:-172.30.40.31}"
 
-if ! ip route get "${TEST_DECOY_IP}" | grep -q "via ${OT_CORE_L3_IP} dev ${EWS_IFACE}"; then
+route_ready=0
+for _ in $(seq 1 15); do
+  if ip route get "${TEST_DECOY_IP}" | grep -q "via ${OT_CORE_L3_IP} dev ${EWS_IFACE}"; then
+    route_ready=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "${route_ready}" -ne 1 ]; then
   echo "ERROR: EWS return route to ${DECOY_SUBNET} was not installed correctly"
   echo "Expected: ${TEST_DECOY_IP} via ${OT_CORE_L3_IP} dev ${EWS_IFACE}"
   echo

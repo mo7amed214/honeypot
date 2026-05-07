@@ -5,6 +5,8 @@ set -euo pipefail
 LEVEL3_USER="${1:-john}"
 ENABLE_INTEGRATION_NIC="${HONEYPOT_ENABLE_INTEGRATION_NIC:-0}"
 INTEGRATION_IP="${HONEYPOT_INTEGRATION_IP:-}"
+OT_CORE_L3_IP="${HONEYPOT_OT_CORE_L3_IP:-172.30.70.1}"
+DECOY_SUBNET="${HONEYPOT_DECOY_SUBNET:-172.30.40.0/24}"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -28,7 +30,11 @@ network:
   ethernets:
     ${INTEGRATION_IFACE}:
       addresses: [${INTEGRATION_IP}/24]
+      routes:
+        - to: ${DECOY_SUBNET}
+          via: ${OT_CORE_L3_IP}
 EOF
+    chmod 0600 /etc/netplan/60-integration.yaml
     netplan apply 2>/dev/null || true
   fi
 fi

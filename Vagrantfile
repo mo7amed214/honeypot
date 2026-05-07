@@ -3,7 +3,8 @@ LEVEL3_PASSWORD = ENV.fetch("LEVEL3_PASSWORD", "Cisco")
 BASE_BOX = ENV.fetch("HONEYPOT_VAGRANT_BOX", "bento/ubuntu-22.04")
 EWS_MODE = ENV.fetch("HONEYPOT_EWS_MODE", "linux")
 EWS_WINDOWS_BOX = ENV.fetch("HONEYPOT_EWS_BOX", "honeypot/ews-win11-local")
-PROFILE = ENV.fetch("HONEYPOT_VAGRANT_PROFILE", "laptop1-safe")
+RAW_PROFILE = ENV.fetch("HONEYPOT_VAGRANT_PROFILE", "laptop1-safe")
+PROFILE = RAW_PROFILE == "full" ? "ews-only" : RAW_PROFILE
 BRIDGE_IFACE = ENV.fetch("HONEYPOT_BRIDGE_IFACE", "Realtek Gaming GbE Family Controller")
 SAFE_NET_PREFIX = ENV.fetch("HONEYPOT_SAFE_NET_PREFIX", "192.168.56")
 INTEGRATION_NET_PREFIX = ENV.fetch("HONEYPOT_INTEGRATION_NET_PREFIX", "172.30.70")
@@ -215,7 +216,7 @@ PROFILE_MACHINES = {
 }.freeze
 
 unless PROFILE_MACHINES.key?(PROFILE)
-  raise "Unknown HONEYPOT_VAGRANT_PROFILE=#{PROFILE}. Expected one of: #{PROFILE_MACHINES.keys.join(', ')}"
+  raise "Unknown HONEYPOT_VAGRANT_PROFILE=#{RAW_PROFILE}. Expected one of: #{(PROFILE_MACHINES.keys + ['full']).join(', ')}"
 end
 
 INTEGRATION_IP_SUFFIX = {
@@ -310,6 +311,8 @@ Vagrant.configure("2") do |config|
             "LEVEL3_PASSWORD" => LEVEL3_PASSWORD,
             "HONEYPOT_ENABLE_INTEGRATION_NIC" => ENABLE_INTEGRATION_NIC ? "1" : "0",
             "HONEYPOT_INTEGRATION_IP" => ENABLE_INTEGRATION_NIC ? "#{INTEGRATION_NET_PREFIX}.#{INTEGRATION_IP_SUFFIX.fetch('ews')}" : "",
+            "HONEYPOT_OT_CORE_L3_IP" => ENV.fetch("HONEYPOT_OT_CORE_L3_IP", "172.30.70.1"),
+            "HONEYPOT_DECOY_SUBNET" => ENV.fetch("HONEYPOT_DECOY_SUBNET", "172.30.40.0/24"),
           },
           path: "vagrant/provision/ews_with_containers.sh",
           args: [LEVEL3_USER]
