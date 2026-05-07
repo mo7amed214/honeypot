@@ -113,11 +113,15 @@ docker compose \
   up -d --build
 
 # ── Level 3 containers ───────────────────────────────────────────────────────
+# SCADA_L2_URL tells the OPC-UA server (C binary) to defer the 4 PERA-mapped
+# nodes, and activates the pera_bridge sidecar that writes those values from
+# PERA into the OPC-UA node store every 2 s.
 # Monitoring profile is intentionally omitted: PERA's blue team stack
 # (bt_grafana, bt_aiis, influxdb) is the SOC console for this integration.
 # Level 3 grafana/loki/promtail/zeek would conflict on ports 3000/3100.
 mkdir -p /var/log/zeek
 cd /opt/honeypot
+export SCADA_L2_URL="http://level2_scada:8080"
 docker compose \
   -f compose/docker-compose.level3.yml \
   up -d --build
