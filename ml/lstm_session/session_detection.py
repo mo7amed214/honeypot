@@ -33,6 +33,7 @@ RULE_TO_EVIDENCE = {
     "100305": "critical_write",
     "100306": "smb_access",
     "100307": "discovery",
+    "100308": "critical_write",
     "100402": "host_access",
     "100404": "host_command",
     "100405": "host_scriptblock",
@@ -48,6 +49,7 @@ RULE_TO_STAGE = {
     "100305": "opcua_write",
     "100306": "smb_access",
     "100307": "discovery",
+    "100308": "opcua_write",
     "100402": "host_activity",
     "100404": "host_command",
     "100405": "host_scriptblock",
@@ -63,6 +65,7 @@ RULE_TO_ASSET = {
     "100305": "opcua",
     "100306": "smb",
     "100307": "level3",
+    "100308": "opcua",
     "100402": "ews",
     "100404": "ews",
     "100405": "ews",
@@ -79,7 +82,7 @@ STAGE_TO_RULES = {
     "smb_access": {"100302", "100306"},
     "historian_web": {"100301"},
     "opcua_path": {"100303"},
-    "opcua_write": {"100303", "100304", "100305", "100209", "100406"},
+    "opcua_write": {"100303", "100304", "100305", "100308", "100209", "100406"},
     "process_anomaly": {"100209", "100406"},
 }
 
@@ -214,7 +217,7 @@ def alert_matches_step(alert: Dict[str, Any], row: Dict[str, Any]) -> bool:
     rule_id = str(nested_get(alert, "rule", "id") or "")
     if rule_id not in step_rule_ids(row):
         return False
-    if rule_id in {"100301", "100302", "100303", "100304", "100305", "100306", "100307"}:
+    if rule_id in {"100301", "100302", "100303", "100304", "100305", "100306", "100307", "100308"}:
         return network_event_matches(alert, row)
     if rule_id in {"100402", "100404", "100405", "100406"}:
         return host_event_matches(alert, row)

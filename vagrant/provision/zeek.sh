@@ -60,7 +60,7 @@ Wants=network-online.target
 Type=simple
 EnvironmentFile=/etc/default/honeypot-zeek
 WorkingDirectory=/opt/zeek/logs/current
-ExecStart=/bin/bash -lc 'exec /opt/zeek/bin/zeek -C -i "${CAPTURE_IFACE}" /opt/honeypot/monitoring/zeek/discovery_scan_detect.zeek /opt/honeypot/monitoring/zeek/opcua_write_detect.zeek'
+ExecStart=/bin/bash -lc 'exec /opt/zeek/bin/zeek -C -i "${CAPTURE_IFACE}" /opt/honeypot/monitoring/zeek/discovery_scan_detect.zeek /opt/honeypot/monitoring/zeek/opcua_write_detect.zeek /opt/honeypot/monitoring/zeek/arp_mitm_detect.zeek'
 Restart=always
 RestartSec=5
 

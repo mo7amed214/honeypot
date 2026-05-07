@@ -112,4 +112,12 @@
     <group>process,execution,endpoint,anomaly,ot_impact,ews,</group>
   </rule>
 
+  <rule id="100308" level="13">
+    <decoded_as>json</decoded_as>
+    <field name="detection_id">100308A</field>
+    <field name="service">network.arp_mitm</field>
+    <description>ARP cache poisoning detected — MAC changed for a known asset IP (T0830 MitM on OPC UA path).</description>
+    <group>zeek,network,arp,mitm,critical,</group>
+  </rule>
+
 </group>
