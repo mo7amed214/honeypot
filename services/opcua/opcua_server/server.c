@@ -3,6 +3,7 @@
 #include <open62541/plugin/log_stdout.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 static volatile UA_Boolean running = true;
@@ -48,6 +49,7 @@ typedef struct {
     UA_Double tool_wear_index;
     UA_Double ambient_temp_c;
 
+    UA_Boolean pera_mode;  /* when true, pera_bridge writes the 4 mapped nodes */
     UA_NodeId line1_conveyor_speed_mpm_node;
     UA_NodeId station1_motor_rpm_node;
     UA_NodeId robot_arm_3_cycle_count_node;
@@ -393,21 +395,27 @@ static void updateProcessModel(UA_Server *server, void *data) {
         }
     }
 
-    writeDouble(server, &m->line1_conveyor_speed_mpm_node, m->line1_conveyor_speed_mpm);
+    /* In pera_mode the 4 mapped tags are driven by pera_bridge via OPC-UA
+       client writes — skip them here to avoid overwriting bridge values. */
+    if(!m->pera_mode)
+        writeDouble(server, &m->line1_conveyor_speed_mpm_node, m->line1_conveyor_speed_mpm);
     writeDouble(server, &m->station1_motor_rpm_node, m->station1_motor_rpm);
     writeUInt32(server, &m->robot_arm_3_cycle_count_node, m->robot_arm_3_cycle_count);
     writeDouble(server, &m->line1_vibration_mm_s_node, m->line1_vibration_mm_s);
     writeUInt32(server, &m->station1_part_count_node, m->station1_part_count);
-    writeDouble(server, &m->weld_cell_temperature_c_node, m->weld_cell_temperature_c);
+    if(!m->pera_mode)
+        writeDouble(server, &m->weld_cell_temperature_c_node, m->weld_cell_temperature_c);
     writeDouble(server, &m->weld_arc_voltage_v_node, m->weld_arc_voltage_v);
     writeDouble(server, &m->weld_wire_feed_speed_mmin_node, m->weld_wire_feed_speed_mmin);
     writeUInt32(server, &m->station2_fault_count_node, m->station2_fault_count);
     writeDouble(server, &m->packaging_rate_units_min_node, m->packaging_rate_units_min);
     writeDouble(server, &m->pkg_seal_temp_c_node, m->pkg_seal_temp_c);
     writeUInt32(server, &m->pkg_reject_count_node, m->pkg_reject_count);
-    writeDouble(server, &m->air_pressure_bar_node, m->air_pressure_bar);
+    if(!m->pera_mode)
+        writeDouble(server, &m->air_pressure_bar_node, m->air_pressure_bar);
     writeDouble(server, &m->plant_power_kw_node, m->plant_power_kw);
-    writeDouble(server, &m->cooling_water_temp_c_node, m->cooling_water_temp_c);
+    if(!m->pera_mode)
+        writeDouble(server, &m->cooling_water_temp_c_node, m->cooling_water_temp_c);
 }
 
 int main(void) {
@@ -419,6 +427,9 @@ int main(void) {
     UA_ServerConfig_setDefault(UA_Server_getConfig(server));
 
     UA_UInt16 nsidx = (UA_UInt16)UA_Server_addNamespace(server, "http://manufacturing.example/opcua");
+
+    const char *scada_l2_url = getenv("SCADA_L2_URL");
+    UA_Boolean pera_mode = (scada_l2_url && strlen(scada_l2_url) > 0);
 
     ProcessModel model = {
         .line1_conveyor_speed_mpm = 20.0,
@@ -441,6 +452,7 @@ int main(void) {
         .welding_active = true,
         .maintenance_pause = false,
         .station2_fault_active = false,
+        .pera_mode = pera_mode,
         .tick = 0U,
         .pause_remaining = 0U,
         .weld_hold_remaining = 0U,

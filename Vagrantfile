@@ -165,8 +165,8 @@ PROFILE_MACHINES = {
         hostname: "level3-ews",
         vm_name: "honeypot-ews-integration",
         ip: "172.30.70.10",
-        memory: EWS_MODE == "windows" ? 4096 : 2048,
-        cpus: 2,
+        memory: EWS_MODE == "windows" ? 4096 : 5120,
+        cpus: 3,
         role: "ews",
         promisc_policy: "deny",
         nic_type: "82540EM",
@@ -264,6 +264,9 @@ Vagrant.configure("2") do |config|
         node.vm.synced_folder ".", "C:/vagrant/honeypot"
       else
         node.vm.synced_folder ".", "/opt/honeypot"
+        if name == "ews" && PROFILE == "integration"
+          node.vm.synced_folder "../PERA-integration-ready-", "/opt/pera"
+        end
       end
 
       node.vm.provider "virtualbox" do |vb|

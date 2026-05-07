@@ -67,6 +67,12 @@ function Copy-RepoArtifacts {
         Copy-Item -Force $telemetryScript (Join-Path $downloads "enable_ews_host_telemetry.ps1")
     }
 
+    # Stage the OT manipulation payload at the path that Wazuh rule 100406 detects.
+    $payloadScript = Join-Path $repoRoot "demos\payloads\telemetry_sync_cache.py"
+    if (Test-Path $payloadScript) {
+        Copy-Item -Force $payloadScript (Join-Path $diagDownloads "telemetry_sync_cache.py")
+    }
+
     if (Test-Path $assetRoot) {
         Get-ChildItem -Path $assetRoot -File -ErrorAction SilentlyContinue | ForEach-Object {
             Copy-Item -Force $_.FullName (Join-Path $downloads $_.Name)

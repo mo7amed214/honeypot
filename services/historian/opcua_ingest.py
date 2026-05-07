@@ -42,7 +42,6 @@ def opcua_target_host(url: str) -> str:
     parsed = urlparse(url)
     if parsed.hostname:
         return parsed.hostname
-    # Fallback for malformed values that still resemble host:port
     if "://" in url:
         tail = url.split("://", 1)[1]
         return tail.split(":", 1)[0].split("/", 1)[0]

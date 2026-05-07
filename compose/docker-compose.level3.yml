@@ -1,5 +1,7 @@
 networks:
   ot-net:
+  l2_l3_integration:
+    external: true
 
 volumes:
   historian_data:
@@ -13,11 +15,26 @@ services:
 
   opcua:
     build: ../services/opcua
+    environment:
+      SCADA_L2_URL: ${SCADA_L2_URL:-}
     ports:
       - "4840:4840"
     networks: [ot-net]
     restart: unless-stopped
     mem_limit: 256m
+
+  opcua-pera-bridge:
+    build:
+      context: ../services/opcua
+      dockerfile: Dockerfile.bridge
+    environment:
+      SCADA_L2_URL: ${SCADA_L2_URL:-}
+      OPCUA_URL: opc.tcp://opcua:4840
+      PERA_BRIDGE_INTERVAL: "2.0"
+    networks: [ot-net, l2_l3_integration]
+    depends_on: [opcua]
+    restart: unless-stopped
+    mem_limit: 64m
 
   smb:
     build: ../services/smb
@@ -135,6 +152,7 @@ services:
         exec zeek -C -i "$$iface"
           /opt/zeek/share/zeek/site/discovery_scan_detect.zeek
           /opt/zeek/share/zeek/site/opcua_write_detect.zeek
+          /opt/zeek/share/zeek/site/arp_mitm_detect.zeek
       '
     restart: unless-stopped
     mem_limit: 256m
