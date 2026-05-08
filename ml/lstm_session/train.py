@@ -45,13 +45,13 @@ def collate_batch(batch: Sequence[Dict]) -> Dict[str, torch.Tensor]:
     def alloc_long() -> torch.Tensor:
         return torch.zeros((batch_size, max_len), dtype=torch.long)
 
-    scenario_step = alloc_long()
-    stage = alloc_long()
     asset = alloc_long()
     source = alloc_long()
     target = alloc_long()
     event_kind = alloc_long()
-    numeric = torch.zeros((batch_size, max_len, 3), dtype=torch.float32)
+    rule_id = alloc_long()
+    agent_name = alloc_long()
+    numeric = torch.zeros((batch_size, max_len, 5), dtype=torch.float32)
     lengths = torch.zeros(batch_size, dtype=torch.long)
     danger_score = torch.zeros(batch_size, dtype=torch.float32)
     danger_label = torch.zeros(batch_size, dtype=torch.long)
@@ -89,21 +89,21 @@ def collate_batch(batch: Sequence[Dict]) -> Dict[str, torch.Tensor]:
             }
         )
         for j, event in enumerate(encoded_events):
-            scenario_step[i, j] = event["scenario_step"]
-            stage[i, j] = event["attack_stage"]
             asset[i, j] = event["asset_class"]
             source[i, j] = event["source_asset"]
             target[i, j] = event["target_asset"]
             event_kind[i, j] = event["event_kind"]
+            rule_id[i, j] = event["rule_id"]
+            agent_name[i, j] = event["agent_name"]
             numeric[i, j] = torch.tensor(event["numeric"], dtype=torch.float32)
 
     return {
-        "scenario_step": scenario_step,
-        "attack_stage": stage,
         "asset_class": asset,
         "source_asset": source,
         "target_asset": target,
         "event_kind": event_kind,
+        "rule_id": rule_id,
+        "agent_name": agent_name,
         "numeric": numeric,
         "lengths": lengths,
         "danger_score": danger_score,
@@ -117,14 +117,14 @@ def collate_batch(batch: Sequence[Dict]) -> Dict[str, torch.Tensor]:
 class SessionLSTM(nn.Module):
     def __init__(self, vocabs: Dict[str, Dict[str, int]], hidden_size: int = 48):
         super().__init__()
-        self.scenario_step_emb = nn.Embedding(len(vocabs["scenario_step"]), 10, padding_idx=0)
-        self.attack_stage_emb = nn.Embedding(len(vocabs["attack_stage"]), 8, padding_idx=0)
         self.asset_class_emb = nn.Embedding(len(vocabs["asset_class"]), 6, padding_idx=0)
         self.source_asset_emb = nn.Embedding(len(vocabs["source_asset"]), 4, padding_idx=0)
         self.target_asset_emb = nn.Embedding(len(vocabs["target_asset"]), 4, padding_idx=0)
         self.event_kind_emb = nn.Embedding(len(vocabs["event_kind"]), 4, padding_idx=0)
+        self.rule_id_emb = nn.Embedding(len(vocabs["rule_id"]), 6, padding_idx=0)
+        self.agent_name_emb = nn.Embedding(len(vocabs["agent_name"]), 4, padding_idx=0)
 
-        input_size = 10 + 8 + 6 + 4 + 4 + 4 + 3
+        input_size = 6 + 4 + 4 + 4 + 6 + 4 + 5
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, batch_first=True)
         self.dropout = nn.Dropout(0.15)
         self.danger_head = nn.Linear(hidden_size, len(vocabs["danger_label"]))
@@ -134,12 +134,12 @@ class SessionLSTM(nn.Module):
     def forward(self, batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         features = torch.cat(
             [
-                self.scenario_step_emb(batch["scenario_step"]),
-                self.attack_stage_emb(batch["attack_stage"]),
                 self.asset_class_emb(batch["asset_class"]),
                 self.source_asset_emb(batch["source_asset"]),
                 self.target_asset_emb(batch["target_asset"]),
                 self.event_kind_emb(batch["event_kind"]),
+                self.rule_id_emb(batch["rule_id"]),
+                self.agent_name_emb(batch["agent_name"]),
                 batch["numeric"],
             ],
             dim=-1,
@@ -192,6 +192,8 @@ def run_epoch(
     danger_weights: torch.Tensor,
     stage_weights: torch.Tensor,
     intent_weights: torch.Tensor,
+    stage_loss_weight: float,
+    intent_loss_weight: float,
 ) -> Tuple[float, float, float, float]:
     ce_danger = nn.CrossEntropyLoss(weight=danger_weights)
     ce_stage = nn.CrossEntropyLoss(weight=stage_weights)
@@ -209,8 +211,8 @@ def run_epoch(
         danger_logits, stage_logits, intent_logits = model(batch)
         loss = (
             ce_danger(danger_logits, batch["danger_label"])
-            + 0.25 * ce_stage(stage_logits, batch["dominant_stage"])
-            + 0.30 * ce_intent(intent_logits, batch["session_intent"])
+            + stage_loss_weight * ce_stage(stage_logits, batch["dominant_stage"])
+            + intent_loss_weight * ce_intent(intent_logits, batch["session_intent"])
         )
 
         if training:
@@ -343,6 +345,9 @@ class TrainSummary:
     curated_full_sessions: int
     benign_full_sessions: int
     attack_full_sessions: int
+    input_feature_mode: str
+    input_event_fields: List[str]
+    excluded_semantic_fields: List[str]
     train_examples: int
     val_examples: int
     test_examples: int
@@ -365,22 +370,32 @@ class TrainSummary:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a small LSTM on correlated honeypot sessions.")
     parser.add_argument("--scenario-root", default="artifacts/scenario-runs")
+    parser.add_argument("--detection-root", default="monitoring/ml")
     parser.add_argument("--output-dir", default="ml/runs/latest")
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--hidden-size", type=int, default=48)
     parser.add_argument("--learning-rate", type=float, default=0.005)
+    parser.add_argument("--stage-loss-weight", type=float, default=0.25)
+    parser.add_argument("--intent-loss-weight", type=float, default=0.3)
     parser.add_argument("--no-prefix-expansion", action="store_true")
+    parser.add_argument("--manifest-only", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     scenario_root = Path(args.scenario_root)
+    detection_root = Path(args.detection_root)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    examples = build_examples(scenario_root, expand_prefixes=not args.no_prefix_expansion)
+    examples = build_examples(
+        scenario_root,
+        expand_prefixes=not args.no_prefix_expansion,
+        detection_root=detection_root,
+        prefer_detection_views=not args.manifest_only,
+    )
     if not examples:
         raise SystemExit(f"No training examples found under {scenario_root}")
 
@@ -414,8 +429,26 @@ def main() -> None:
     last_val = (0.0, 0.0, 0.0, 0.0)
 
     for _epoch in range(args.epochs):
-        last_train = run_epoch(model, train_loader, optimizer, danger_weights, stage_weights, intent_weights)
-        last_val = run_epoch(model, val_loader, None, danger_weights, stage_weights, intent_weights)
+        last_train = run_epoch(
+            model,
+            train_loader,
+            optimizer,
+            danger_weights,
+            stage_weights,
+            intent_weights,
+            args.stage_loss_weight,
+            args.intent_loss_weight,
+        )
+        last_val = run_epoch(
+            model,
+            val_loader,
+            None,
+            danger_weights,
+            stage_weights,
+            intent_weights,
+            args.stage_loss_weight,
+            args.intent_loss_weight,
+        )
         if last_val[0] < best_val_loss:
             best_val_loss = last_val[0]
             best_state = {key: value.cpu() for key, value in model.state_dict().items()}
@@ -441,6 +474,16 @@ def main() -> None:
     eval_summary = summarize_eval_predictions(eval_predictions)
 
     full_sessions = [example for example in encoded_examples if example["is_full_session"]]
+    input_event_fields = [
+        "asset_class",
+        "source_asset",
+        "target_asset",
+        "event_kind",
+        "rule_id",
+        "agent_name",
+        "numeric",
+    ]
+    excluded_semantic_fields = ["scenario_step", "attack_stage"]
     summary = TrainSummary(
         total_examples=len(encoded_examples),
         unique_base_sessions=len({example["base_session_id"] for example in encoded_examples}),
@@ -450,12 +493,12 @@ def main() -> None:
         live_full_sessions=sum(
             1
             for example in full_sessions
-            if example["telemetry_origin"] == "live_sensor"
+            if str(example["telemetry_origin"]).startswith("live_")
         ),
         curated_full_sessions=sum(
             1
             for example in full_sessions
-            if example["telemetry_origin"] != "live_sensor"
+            if not str(example["telemetry_origin"]).startswith("live_")
         ),
         benign_full_sessions=sum(
             1
@@ -467,6 +510,9 @@ def main() -> None:
             for example in full_sessions
             if example["ground_truth_label"] != "benign"
         ),
+        input_feature_mode="observable_evidence_only",
+        input_event_fields=input_event_fields,
+        excluded_semantic_fields=excluded_semantic_fields,
         train_examples=len(train_examples),
         val_examples=len(val_examples),
         test_examples=len(test_examples),
@@ -491,7 +537,14 @@ def main() -> None:
         "vocabs": vocabs,
         "config": {
             "hidden_size": args.hidden_size,
-            "numeric_features": ["log_duration_sec", "log_time_delta_sec", "success"],
+            "input_feature_mode": "observable_evidence_only",
+            "input_event_fields": input_event_fields,
+            "excluded_semantic_fields": excluded_semantic_fields,
+            "numeric_features": ["log_duration_sec", "log_time_delta_sec", "success", "rule_level_norm", "log_repeat_count"],
+            "detection_root": str(detection_root),
+            "manifest_only": bool(args.manifest_only),
+            "stage_loss_weight": args.stage_loss_weight,
+            "intent_loss_weight": args.intent_loss_weight,
         },
     }
     torch.save(checkpoint, output_dir / "model.pt")

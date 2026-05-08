@@ -6,15 +6,35 @@ from pathlib import Path
 
 import torch
 
-from ml.lstm_session.session_builder import build_all_vocabs, encode_examples, load_manifest, normalize_event
+from ml.lstm_session.session_builder import (
+    build_examples_for_detection_file,
+    build_examples_for_manifest,
+    encode_examples,
+    load_jsonl_rows,
+)
 from ml.lstm_session.train import SessionLSTM, collate_batch
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run session danger inference with the trained LSTM.")
     parser.add_argument("--model-path", required=True)
-    parser.add_argument("--session-file", required=True, help="Path to one ground_truth.jsonl file")
+    parser.add_argument("--session-file", required=True, help="Path to a ground_truth.jsonl or streamlit_live_session_*.jsonl file")
     return parser.parse_args()
+
+
+def load_one_example(session_file: Path) -> tuple[dict, str]:
+    rows = load_jsonl_rows(session_file)
+    detection_rows = [row for row in rows if row.get("kind") == "session_detection_event"]
+    if detection_rows:
+        examples = build_examples_for_detection_file(session_file, expand_prefixes=False)
+        if not examples:
+            raise SystemExit(f"No detection-backed examples built from {session_file}")
+        return examples[-1], "detection"
+
+    examples = build_examples_for_manifest(session_file, expand_prefixes=False)
+    if not examples:
+        raise SystemExit(f"No manifest-backed examples built from {session_file}")
+    return examples[-1], "manifest"
 
 
 def main() -> None:
@@ -22,35 +42,8 @@ def main() -> None:
     checkpoint = torch.load(args.model_path, map_location="cpu")
     vocabs = checkpoint["vocabs"]
 
-    manifest_rows = load_manifest(Path(args.session_file))
-    if not manifest_rows:
-        raise SystemExit(f"No rows found in {args.session_file}")
-
-    first_ts = float(manifest_rows[0].get("start_ts_epoch", 0.0) or 0.0)
-    normalized = [normalize_event(row, first_ts) for row in sorted(manifest_rows, key=lambda row: float(row.get("start_ts_epoch", 0.0) or 0.0))]
-    example = {
-        "example_id": Path(args.session_file).stem,
-        "session_id": manifest_rows[0].get("session_id", Path(args.session_file).stem),
-        "base_session_id": manifest_rows[0].get("scenario_id", Path(args.session_file).stem),
-        "source_manifest": str(Path(args.session_file)),
-        "event_count": len(normalized),
-        "total_event_count": len(normalized),
-        "is_full_session": True,
-        "stage_path": ">".join(event["attack_stage"] for event in normalized),
-        "asset_path": ">".join(event["asset_class"] for event in normalized),
-        "ground_truth_label": manifest_rows[0].get("ground_truth_label", "unknown"),
-        "dataset_split": manifest_rows[0].get("dataset_split", "unknown"),
-        "telemetry_origin": manifest_rows[0].get("telemetry_origin", "unknown"),
-        "attack_labels_present": sorted({row.get("attack_label", "unknown") for row in manifest_rows}),
-        "session_intent": manifest_rows[0].get("session_intent", "unknown"),
-        "session_summary": manifest_rows[0].get("session_summary", ""),
-        "events": normalized,
-        "danger_score": 0.20,
-        "danger_label": "low",
-        "dominant_stage": normalized[-1]["attack_stage"],
-        "session_intent": manifest_rows[0].get("session_intent", "host_recon"),
-        "session_summary": manifest_rows[0].get("session_summary", ""),
-    }
+    session_file = Path(args.session_file)
+    example, input_mode = load_one_example(session_file)
     encoded = encode_examples([example], vocabs)
     batch = collate_batch(encoded)
 
@@ -74,12 +67,13 @@ def main() -> None:
     print(
         json.dumps(
             {
+                "input_mode": input_mode,
                 "session_id": example["session_id"],
                 "predicted_danger_score": round(score, 4),
                 "predicted_danger_label": danger_label_reverse[danger_id],
                 "predicted_dominant_stage": dominant_stage_reverse[stage_id],
                 "predicted_session_intent": session_intent_reverse[intent_id],
-                "event_count": len(normalized),
+                "event_count": int(example["event_count"]),
             },
             indent=2,
         )

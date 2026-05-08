@@ -12,6 +12,8 @@ MAX_SKEW_SECONDS="${MAX_SKEW_SECONDS:-15}"
 run_root() {
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "$@"
+  elif [[ "${1:-}" == "docker" ]] && docker info >/dev/null 2>&1; then
+    "$@"
   else
     sudo "$@"
   fi

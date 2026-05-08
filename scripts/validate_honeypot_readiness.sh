@@ -17,6 +17,8 @@ ARCHIVE_TIMEOUT_SECONDS="${ARCHIVE_TIMEOUT_SECONDS:-60}"
 run_root() {
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "$@"
+  elif [[ "${1:-}" == "docker" ]] && docker info >/dev/null 2>&1; then
+    "$@"
   elif sudo -n true 2>/dev/null; then
     sudo "$@"
   elif [[ -n "${SUDO_PASSWORD:-}" ]]; then

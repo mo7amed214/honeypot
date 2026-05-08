@@ -11,11 +11,20 @@ LAB_NIC="${LAB_NIC:-enx00e04c257e28}"
 OPCUA_ALIAS_IP="${OPCUA_ALIAS_IP:-192.168.1.11}"
 
 ensure_iptables_rule() {
-  if command -v iptables >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
-    local chain="$1"
-    shift
+  local chain="$1"
+  shift
+
+  if command -v iptables >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
     sudo iptables -C "$chain" "$@" 2>/dev/null || sudo iptables -I "$chain" 1 "$@"
+    return 0
   fi
+
+  local check_args insert_args
+  check_args="$(printf '%q ' "$chain" "$@")"
+  insert_args="$(printf '%q ' "$chain" 1 "$@")"
+  docker run --rm --privileged --net=host alpine:3.20 sh -lc \
+    "apk add --no-cache iptables >/dev/null && \
+     iptables -C ${check_args} 2>/dev/null || iptables -I ${insert_args}"
 }
 
 ensure_ip_alias() {
