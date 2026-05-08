@@ -234,3 +234,9 @@ Ensure-OpenSSH
 Configure-LabNetwork
 Copy-RepoArtifacts -Name $UserName
 Install-OptionalArtifacts -Name $UserName
+
+# Allow network/SSH logons to receive a full elevated admin token (no UAC filtering).
+# Realistic OT workstation misconfiguration — enables arpspoof and other tools that
+# need raw socket access to run over SSH without interactive UAC approval.
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+    -Name "LocalAccountTokenFilterPolicy" -Value 1 -Type DWord -Force
