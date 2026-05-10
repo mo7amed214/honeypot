@@ -265,7 +265,7 @@ Vagrant.configure("2") do |config|
         node.vm.synced_folder ".", "C:/vagrant/honeypot"
       else
         node.vm.synced_folder ".", "/opt/honeypot"
-        if name == "ews" && PROFILE == "integration"
+        if name == "ews" && File.directory?(File.expand_path("../PERA-integration-ready-", __dir__))
           node.vm.synced_folder "../PERA-integration-ready-", "/opt/pera"
         end
       end
@@ -320,6 +320,13 @@ Vagrant.configure("2") do |config|
           },
           path: "vagrant/provision/ews_with_containers.sh",
           args: [LEVEL3_USER]
+        node.vm.provision "shell",
+          env: {
+            "P35_LOKI_PUSH_URL" => ENV.fetch("P35_LOKI_PUSH_URL", "http://192.168.56.11:3100/loki/api/v1/push"),
+            "P35_ALLOY_HTTP_ADDR" => ENV.fetch("P35_EWS_ALLOY_HTTP_ADDR", "192.168.56.5"),
+            "P35_ALLOY_HTTP_PORT" => ENV.fetch("P35_EWS_ALLOY_HTTP_PORT", "12345"),
+          },
+          path: "vagrant/provision/ews_alloy.sh"
       elsif name == "ews" && PROFILE == "integration" && EWS_MODE != "windows"
         node.vm.provision "shell",
           env: {
@@ -330,6 +337,13 @@ Vagrant.configure("2") do |config|
           },
           path: "vagrant/provision/ews_ingress_minimal.sh",
           args: [LEVEL3_USER]
+        node.vm.provision "shell",
+          env: {
+            "P35_LOKI_PUSH_URL" => ENV.fetch("P35_LOKI_PUSH_URL", "http://192.168.56.11:3100/loki/api/v1/push"),
+            "P35_ALLOY_HTTP_ADDR" => ENV.fetch("P35_EWS_ALLOY_HTTP_ADDR", spec[:ip]),
+            "P35_ALLOY_HTTP_PORT" => ENV.fetch("P35_EWS_ALLOY_HTTP_PORT", "12345"),
+          },
+          path: "vagrant/provision/ews_alloy.sh"
       else
         node.vm.provision "shell", path: "vagrant/provision/common.sh", args: [LEVEL3_USER]
         node.vm.provision "shell", env: { "LEVEL3_PASSWORD" => LEVEL3_PASSWORD }, path: "vagrant/provision/#{spec[:role]}.sh"

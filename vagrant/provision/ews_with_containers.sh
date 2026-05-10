@@ -19,15 +19,15 @@ FallbackDNS=9.9.9.9 1.0.0.1
 DNSStubListener=yes
 EOF
   systemctl restart systemd-resolved 2>/dev/null || true
+  resolvectl dns eth0 1.1.1.1 8.8.8.8 9.9.9.9 2>/dev/null || true
+  ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf 2>/dev/null || true
 
   mkdir -p /etc/docker
-  if [[ ! -s /etc/docker/daemon.json ]]; then
-    cat > /etc/docker/daemon.json <<'EOF'
+  cat > /etc/docker/daemon.json <<'EOF'
 {
   "dns": ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
 }
 EOF
-  fi
 }
 
 configure_dns
@@ -70,6 +70,12 @@ fi
 
 # Create Zeek log dir so the bind-mount in docker-compose doesn't fail
 mkdir -p /var/log/zeek
+
+# The Level 3 compose file uses this as an external bridge for the PERA bridge
+# container. Recreate it on rebuilt EWS guests before docker compose starts.
+if ! docker network inspect l2_l3_integration >/dev/null 2>&1; then
+  docker network create l2_l3_integration >/dev/null
+fi
 
 # Pull images and build services in the background so vagrant up returns quickly.
 # The containers start automatically on boot via restart: unless-stopped.
