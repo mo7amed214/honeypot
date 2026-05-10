@@ -58,9 +58,21 @@ INTENT_CANONICAL = {
     "ot_impact": "ot_impact",
 }
 
+DETECTION_IP_TO_ASSET = {
+    "192.168.1.5": "ews",
+    "192.168.1.7": "smb",
+    "192.168.1.9": "monitoring_laptop",
+    "192.168.1.10": "historian",
+    "192.168.1.11": "opcua",
+}
+
 
 def iter_ground_truth_files(scenario_root: Path) -> Iterable[Path]:
     yield from sorted(scenario_root.glob("*/ground_truth.jsonl"))
+
+
+def iter_detection_session_files(detection_root: Path) -> Iterable[Path]:
+    yield from sorted(detection_root.glob("streamlit_live_session_*.jsonl"))
 
 
 def load_manifest(path: Path) -> List[Dict]:
@@ -71,6 +83,20 @@ def load_manifest(path: Path) -> List[Dict]:
             if not line:
                 continue
             rows.append(json.loads(line))
+    return rows
+
+
+def load_jsonl_rows(path: Path) -> List[Dict]:
+    rows: List[Dict] = []
+    with path.open("r", encoding="utf-8", errors="ignore") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
     return rows
 
 
@@ -86,6 +112,8 @@ def normalize_event(raw: Dict, first_ts: float) -> Dict:
         "source_asset": raw.get("source_asset", "unknown"),
         "target_asset": raw.get("target_asset", "unknown"),
         "event_kind": raw.get("event_kind", "unknown"),
+        "rule_id": raw.get("rule_id", "none"),
+        "agent_name": raw.get("agent_name", "none"),
         "ground_truth_label": raw.get("ground_truth_label", "unknown"),
         "dataset_split": raw.get("dataset_split", "unknown"),
         "telemetry_origin": raw.get("telemetry_origin", "unknown"),
@@ -98,15 +126,119 @@ def normalize_event(raw: Dict, first_ts: float) -> Dict:
         "success": 1.0 if int(raw.get("exit_code", 1)) == 0 else 0.0,
         "duration_sec": duration,
         "time_delta_sec": max(0.0, start_ts - first_ts),
+        "rule_level": float(raw.get("rule_level", 0.0) or 0.0),
+        "repeat_count": int(raw.get("repeat_count", 1) or 1),
     }
 
 
-def explicit_session_label(events: List[Dict]) -> str:
+def infer_detection_assets(raw: Dict) -> Tuple[str, str]:
+    source_ip = str(raw.get("data_id_orig_h", "") or "")
+    target_ip = str(raw.get("data_id_resp_h", "") or "")
+    source_asset = DETECTION_IP_TO_ASSET.get(source_ip, "")
+    target_asset = DETECTION_IP_TO_ASSET.get(target_ip, "")
+    agent_name = str(raw.get("agent_name", "") or "")
+    asset_class = str(raw.get("asset_class", "unknown") or "unknown")
+
+    if agent_name == "EWS-WIN11":
+        source_asset = source_asset or "ews"
+        target_asset = target_asset or "ews"
+
+    if not source_asset:
+        source_asset = str(raw.get("source_asset", "") or "")
+    if not target_asset:
+        target_asset = str(raw.get("target_asset", "") or "")
+    if not target_asset or target_asset == "unknown":
+        target_asset = asset_class
+
+    return source_asset or "unknown", target_asset or "unknown"
+
+
+def normalize_detection_event(raw: Dict, first_ts: float, meta: Dict[str, str]) -> Dict:
+    event_ts = float(raw.get("alert_epoch", 0.0) or 0.0)
+    rule_id = str(raw.get("rule_id", "none") or "none")
+    evidence_key = str(raw.get("evidence_key", raw.get("attack_stage", "unknown")) or "unknown")
+    service_hint = (
+        str(raw.get("data_event_type", "") or "")
+        or str(raw.get("data_service", "") or "")
+        or str(raw.get("data_route", "") or "")
+        or str(raw.get("data_tag", "") or "")
+        or evidence_key
+    )
+    source_asset, target_asset = infer_detection_assets(raw)
+    return {
+        "scenario_step": f"det_rule_{rule_id}",
+        "attack_label": evidence_key,
+        "attack_stage": raw.get("attack_stage", "unknown"),
+        "asset_class": raw.get("asset_class", "unknown"),
+        "source_asset": source_asset,
+        "target_asset": target_asset,
+        "event_kind": service_hint,
+        "rule_id": rule_id,
+        "agent_name": str(raw.get("agent_name", "none") or "none"),
+        "ground_truth_label": meta.get("ground_truth_label", "unknown"),
+        "dataset_split": meta.get("dataset_split", "ml_live_detection"),
+        "telemetry_origin": meta.get("telemetry_origin", "live_detection"),
+        "mitre_technique": meta.get("mitre_technique", "unknown"),
+        "scenario_family": meta.get("scenario_family", "live_detection"),
+        "session_intent": meta.get("session_intent", "unknown"),
+        "session_danger_label": meta.get("session_danger_label", ""),
+        "session_summary": meta.get("session_summary", ""),
+        "exit_code": 0,
+        "success": 1.0,
+        "duration_sec": 0.0,
+        "time_delta_sec": max(0.0, event_ts - first_ts),
+        "rule_level": float(raw.get("rule_level", 0.0) or 0.0),
+        "repeat_count": int(raw.get("repeat_count", 1) or 1),
+    }
+
+
+def collapse_detection_bursts(events: List[Dict], max_gap_sec: float = 30.0) -> List[Dict]:
+    if not events:
+        return []
+
+    def signature(event: Dict) -> Tuple[str, ...]:
+        return (
+            str(event.get("rule_id", "")),
+            str(event.get("attack_stage", "")),
+            str(event.get("asset_class", "")),
+            str(event.get("source_asset", "")),
+            str(event.get("target_asset", "")),
+            str(event.get("event_kind", "")),
+            str(event.get("agent_name", "")),
+        )
+
+    collapsed: List[Dict] = []
+    current = dict(events[0])
+    burst_start = float(current.get("time_delta_sec", 0.0) or 0.0)
+    repeat_count = 1
+
+    for event in events[1:]:
+        same_signature = signature(event) == signature(current)
+        gap = float(event.get("time_delta_sec", 0.0) or 0.0) - float(current.get("time_delta_sec", 0.0) or 0.0)
+        if same_signature and gap <= max_gap_sec:
+            repeat_count += 1
+            current["duration_sec"] = max(0.0, float(event.get("time_delta_sec", 0.0) or 0.0) - burst_start)
+            current["rule_level"] = max(float(current.get("rule_level", 0.0) or 0.0), float(event.get("rule_level", 0.0) or 0.0))
+            current["repeat_count"] = repeat_count
+            continue
+
+        current["repeat_count"] = repeat_count
+        collapsed.append(current)
+        current = dict(event)
+        burst_start = float(current.get("time_delta_sec", 0.0) or 0.0)
+        repeat_count = 1
+
+    current["repeat_count"] = repeat_count
+    collapsed.append(current)
+    return collapsed
+
+
+def annotated_session_label(events: List[Dict]) -> str:
     explicit = [event["session_danger_label"] for event in events if event.get("session_danger_label")]
     return explicit[-1] if explicit else ""
 
 
-def explicit_session_intent(events: List[Dict]) -> str:
+def annotated_session_intent(events: List[Dict]) -> str:
     intents = [event["session_intent"] for event in events if event.get("session_intent") not in {"", "unknown"}]
     return INTENT_CANONICAL.get(intents[-1], intents[-1]) if intents else ""
 
@@ -151,16 +283,10 @@ def danger_label_from_score(score: float) -> str:
 
 
 def danger_score_from_events(events: List[Dict], is_full_session: bool) -> float:
-    label = explicit_session_label(events)
-    if is_full_session and label in DANGER_LABEL_TO_SCORE:
-        return DANGER_LABEL_TO_SCORE[label]
     return derived_danger_score_from_events(events)
 
 
 def danger_label_from_events(events: List[Dict], score: float, is_full_session: bool) -> str:
-    explicit = explicit_session_label(events)
-    if is_full_session and explicit:
-        return explicit
     return danger_label_from_score(score)
 
 
@@ -170,9 +296,7 @@ def dominant_stage_from_events(events: List[Dict]) -> str:
 
 def derived_session_intent_from_events(events: List[Dict]) -> str:
     stage_path = {event["attack_stage"] for event in events}
-    attack_labels = {event["attack_label"] for event in events if event.get("attack_label")}
-    ground_truth = [event["ground_truth_label"] for event in events if event.get("ground_truth_label")]
-    if ground_truth and ground_truth[-1] == "benign" and stage_path.issubset(BENIGN_STAGES):
+    if stage_path.issubset(BENIGN_STAGES):
         return "benign_operations"
     if "opcua_write" in stage_path or "process_anomaly" in stage_path:
         return "ot_impact"
@@ -180,30 +304,48 @@ def derived_session_intent_from_events(events: List[Dict]) -> str:
         return "ot_recon"
     if "historian_web" in stage_path or "smb_access" in stage_path:
         return "collection"
-    if "host_command" in stage_path or "host_activity" in stage_path:
-        if "foothold" in attack_labels or "lateral_movement" in attack_labels:
-            return "credential_access"
+    if "host_command" in stage_path or "host_scriptblock" in stage_path:
         return "host_recon"
     if "credential_access" in stage_path:
         return "credential_access"
+    if "host_activity" in stage_path:
+        return "credential_access"
     if "discovery" in stage_path:
         return "discovery_scan"
-    if attack_labels & {"foothold", "lateral_movement", "credential_access"}:
-        return "credential_access"
-    return "benign_operations" if ground_truth and ground_truth[-1] == "benign" else "host_recon"
+    return "host_recon"
 
 
 def session_intent_from_events(events: List[Dict], is_full_session: bool) -> str:
-    if is_full_session:
-        explicit = explicit_session_intent(events)
-        if explicit:
-            return explicit
     return derived_session_intent_from_events(events)
 
 
 def session_summary_from_events(events: List[Dict]) -> str:
     summaries = [event["session_summary"] for event in events if event.get("session_summary")]
     return summaries[-1] if summaries else ""
+
+
+def manifest_meta_from_rows(rows: List[Dict], telemetry_origin: str, dataset_split: str) -> Dict[str, str]:
+    if not rows:
+        return {
+            "ground_truth_label": "unknown",
+            "dataset_split": dataset_split,
+            "telemetry_origin": telemetry_origin,
+            "mitre_technique": "unknown",
+            "scenario_family": "unknown",
+            "session_intent": "unknown",
+            "session_danger_label": "",
+            "session_summary": "",
+        }
+    return {
+        "ground_truth_label": str(rows[-1].get("ground_truth_label", "unknown")),
+        "dataset_split": str(rows[-1].get("dataset_split", dataset_split)),
+        "telemetry_origin": telemetry_origin,
+        "mitre_technique": str(rows[-1].get("mitre_technique", "unknown")),
+        "scenario_family": str(rows[-1].get("scenario_family", rows[0].get("scenario_id", "unknown"))),
+        "session_intent": str(rows[-1].get("session_intent", "unknown")),
+        "session_danger_label": str(rows[-1].get("session_danger_label", "")),
+        "session_summary": str(rows[-1].get("session_summary", "")),
+    }
 
 
 def build_examples_for_manifest(manifest_path: Path, expand_prefixes: bool = True) -> List[Dict]:
@@ -243,6 +385,8 @@ def build_examples_for_manifest(manifest_path: Path, expand_prefixes: bool = Tru
                 "ground_truth_label": ground_truth_labels[-1] if ground_truth_labels else "unknown",
                 "dataset_split": dataset_splits[-1] if dataset_splits else "unknown",
                 "telemetry_origin": telemetry_origins[-1] if telemetry_origins else "unknown",
+                "annotated_session_intent": annotated_session_intent(prefix_events),
+                "annotated_session_danger_label": annotated_session_label(prefix_events),
                 "session_intent": session_intent,
                 "session_summary": session_summary_from_events(prefix_events),
                 "events": prefix_events,
@@ -254,8 +398,111 @@ def build_examples_for_manifest(manifest_path: Path, expand_prefixes: bool = Tru
     return examples
 
 
-def build_examples(scenario_root: Path, expand_prefixes: bool = True) -> List[Dict]:
+def build_examples_for_detection_file(
+    detection_file: Path,
+    expand_prefixes: bool = True,
+    manifest_cache: Dict[Path, List[Dict]] | None = None,
+) -> List[Dict]:
+    rows = [
+        row for row in load_jsonl_rows(detection_file)
+        if row.get("kind") == "session_detection_event"
+    ]
+    rows.sort(key=lambda row: float(row.get("alert_epoch", 0.0) or 0.0))
+    if not rows:
+        return []
+
+    session_id = str(rows[0].get("session_id", detection_file.stem))
+    base_session_id = str(rows[0].get("scenario_id", session_id))
+    manifest_path = Path(str(rows[0].get("source_manifest", "")))
+    manifest_rows: List[Dict] = []
+    if manifest_path and manifest_path.exists():
+        if manifest_cache is not None and manifest_path in manifest_cache:
+            manifest_rows = manifest_cache[manifest_path]
+        else:
+            manifest_rows = load_manifest(manifest_path)
+            if manifest_cache is not None:
+                manifest_cache[manifest_path] = manifest_rows
+
+    meta = manifest_meta_from_rows(manifest_rows, telemetry_origin="live_detection", dataset_split="ml_live_detection")
+    first_ts = float(rows[0].get("alert_epoch", 0.0) or 0.0)
+    normalized = collapse_detection_bursts([normalize_detection_event(row, first_ts, meta) for row in rows])
+
     examples: List[Dict] = []
+    prefixes = range(1, len(normalized) + 1) if expand_prefixes else [len(normalized)]
+    for prefix_len in prefixes:
+        prefix_events = normalized[:prefix_len]
+        attack_labels = sorted({event["attack_label"] for event in prefix_events})
+        ground_truth_labels = sorted({event["ground_truth_label"] for event in prefix_events})
+        dataset_splits = sorted({event["dataset_split"] for event in prefix_events})
+        telemetry_origins = sorted({event["telemetry_origin"] for event in prefix_events})
+        is_full_session = prefix_len == len(normalized)
+        danger_score = danger_score_from_events(prefix_events, is_full_session)
+        session_intent = session_intent_from_events(prefix_events, is_full_session)
+        examples.append(
+            {
+                "example_id": f"{session_id}-detect-prefix-{prefix_len}",
+                "session_id": session_id,
+                "base_session_id": base_session_id,
+                "source_manifest": str(manifest_path) if manifest_path else str(detection_file),
+                "source_detection_file": str(detection_file),
+                "event_count": prefix_len,
+                "total_event_count": len(normalized),
+                "is_full_session": is_full_session,
+                "stage_path": ">".join(event["attack_stage"] for event in prefix_events),
+                "asset_path": ">".join(event["asset_class"] for event in prefix_events),
+                "attack_labels_present": attack_labels,
+                "ground_truth_labels_present": ground_truth_labels,
+                "ground_truth_label": ground_truth_labels[-1] if ground_truth_labels else meta["ground_truth_label"],
+                "dataset_split": dataset_splits[-1] if dataset_splits else meta["dataset_split"],
+                "telemetry_origin": telemetry_origins[-1] if telemetry_origins else meta["telemetry_origin"],
+                "annotated_session_intent": meta.get("session_intent", "unknown"),
+                "annotated_session_danger_label": meta.get("session_danger_label", ""),
+                "session_intent": session_intent,
+                "session_summary": meta.get("session_summary", ""),
+                "events": prefix_events,
+                "danger_score": danger_score,
+                "danger_label": danger_label_from_events(prefix_events, danger_score, is_full_session),
+                "dominant_stage": dominant_stage_from_events(prefix_events),
+            }
+        )
+    return examples
+
+
+def latest_detection_files_by_session(detection_root: Path) -> Dict[str, Path]:
+    latest: Dict[str, Tuple[float, Path]] = {}
+    for detection_file in iter_detection_session_files(detection_root):
+        rows = load_jsonl_rows(detection_file)
+        session_rows = [row for row in rows if row.get("kind") == "session_detection_event"]
+        if not session_rows:
+            continue
+        session_id = str(session_rows[0].get("session_id", detection_file.stem))
+        score = max(float(row.get("alert_epoch", 0.0) or 0.0) for row in session_rows)
+        previous = latest.get(session_id)
+        if previous is None or score >= previous[0]:
+            latest[session_id] = (score, detection_file)
+    return {session_id: item[1] for session_id, item in latest.items()}
+
+
+def build_examples(
+    scenario_root: Path,
+    expand_prefixes: bool = True,
+    detection_root: Path | None = None,
+    prefer_detection_views: bool = True,
+) -> List[Dict]:
+    examples: List[Dict] = []
+    manifest_cache: Dict[Path, List[Dict]] = {}
+    detection_sessions: Dict[str, Path] = {}
+
+    if prefer_detection_views and detection_root is not None and detection_root.exists():
+        detection_sessions = latest_detection_files_by_session(detection_root)
+        for detection_file in detection_sessions.values():
+            examples.extend(
+                build_examples_for_detection_file(
+                    detection_file,
+                    expand_prefixes=False,
+                    manifest_cache=manifest_cache,
+                )
+            )
 
     for manifest_path in iter_ground_truth_files(scenario_root):
         examples.extend(build_examples_for_manifest(manifest_path, expand_prefixes=expand_prefixes))
@@ -289,12 +536,12 @@ def build_example_vocab(examples: List[Dict], field: str) -> Dict[str, int]:
 
 def build_all_vocabs(examples: List[Dict]) -> Dict[str, Dict[str, int]]:
     event_fields = [
-        "scenario_step",
-        "attack_stage",
         "asset_class",
         "source_asset",
         "target_asset",
         "event_kind",
+        "rule_id",
+        "agent_name",
     ]
     example_fields = [
         "danger_label",
@@ -312,16 +559,18 @@ def encode_event(event: Dict, vocabs: Dict[str, Dict[str, int]]) -> Dict:
         return vocab.get(event.get(field, "unknown"), vocab["<unk>"])
 
     return {
-        "scenario_step": lookup("scenario_step"),
-        "attack_stage": lookup("attack_stage"),
         "asset_class": lookup("asset_class"),
         "source_asset": lookup("source_asset"),
         "target_asset": lookup("target_asset"),
         "event_kind": lookup("event_kind"),
+        "rule_id": lookup("rule_id"),
+        "agent_name": lookup("agent_name"),
         "numeric": [
             math.log1p(event["duration_sec"]),
             math.log1p(event["time_delta_sec"]),
             float(event["success"]),
+            float(event.get("rule_level", 0.0)) / 13.0,
+            math.log1p(int(event.get("repeat_count", 1) or 1)),
         ],
     }
 

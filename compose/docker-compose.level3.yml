@@ -121,9 +121,40 @@ services:
     profiles: [monitoring]
     command: -config.file=/etc/promtail/config.yml
     volumes:
+      - ../monitoring/wazuh/live-alerts:/var/ossec/logs/alerts:ro
+      - ../monitoring/ml:/var/log/honeypot-ml:ro
       - ../monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
       - promtail_positions:/tmp
     depends_on: [loki]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [ot-net]
+    restart: unless-stopped
+    mem_limit: 128m
+
+  soc-publisher:
+    build:
+      context: ../services/historian
+      dockerfile: Dockerfile
+    profiles: [monitoring]
+    command: ["python", "/app/publish_integration_soc.py"]
+    environment:
+      INTEGRATION_SOC_ALERTS_PATH: /var/ossec/logs/alerts/alerts.json
+      INTEGRATION_SOC_ML_DIR: /var/log/honeypot-ml
+      INTEGRATION_SOC_HIST_DIR: /var/log/historian
+      INTEGRATION_SOC_ZEEK_DIR: /var/log/zeek/current
+      INTEGRATION_SOC_AUTH_LOG: /var/log/auth.log
+      INTEGRATION_SOC_POLL_SECONDS: ${INTEGRATION_SOC_POLL_SECONDS:-15}
+      INTEGRATION_SOC_LOOKBACK_SECONDS: ${INTEGRATION_SOC_LOOKBACK_SECONDS:-7200}
+      INTEGRATION_SOC_SESSION_ID: ${INTEGRATION_SOC_SESSION_ID:-INTEGRATION-LIVE}
+    volumes:
+      - ../scripts/publish_integration_soc.py:/app/publish_integration_soc.py:ro
+      - ../monitoring/wazuh/live-alerts:/var/ossec/logs/alerts
+      - ../monitoring/ml:/var/log/honeypot-ml
+      - ../services/historian/logs:/var/log/historian:ro
+      - /var/log/zeek:/var/log/zeek:ro
+      - /var/log/auth.log:/var/log/auth.log:ro
+    depends_on: [historian-web, historian-ingest, loki, promtail, zeek]
     networks: [ot-net]
     restart: unless-stopped
     mem_limit: 128m

@@ -127,21 +127,11 @@ def hybrid_session_intent(row: Dict) -> str:
     stage_path = str(row.get("stage_path", ""))
     tokens = [token for token in stage_path.split(">") if token]
     predicted = str(row.get("predicted_session_intent", "unknown"))
-    ground_truth_label = str(row.get("ground_truth_label", "unknown"))
-    attack_labels = set(row.get("attack_labels_present", []))
     benign_like = {"monitoring_api", "network_healthcheck"}
 
     if not tokens:
         return predicted
     if all(token.startswith("benign_") or token in benign_like for token in tokens):
-        if ground_truth_label == "attack":
-            if attack_labels & {"impact"}:
-                return "ot_impact"
-            if attack_labels & {"discovery"}:
-                return "discovery_scan"
-            if attack_labels & {"foothold", "lateral_movement", "credential_access"}:
-                return "credential_access"
-            return predicted
         return "benign_operations"
     if "opcua_write" in tokens or "process_anomaly" in tokens:
         return "ot_impact"
@@ -151,12 +141,10 @@ def hybrid_session_intent(row: Dict) -> str:
         return "collection"
     if "host_command" in tokens or "host_scriptblock" in tokens:
         return "host_recon"
-    if tokens == ["discovery"]:
+    if "credential_access" in tokens or "host_activity" in tokens:
+        return "credential_access"
+    if "discovery" in tokens:
         return "discovery_scan"
-    if tokens == ["credential_access", "credential_access"] or tokens == ["credential_access"]:
-        return "credential_access"
-    if tokens == ["smb_access", "host_activity"]:
-        return "credential_access"
     return predicted
 
 
@@ -168,6 +156,27 @@ def hybrid_eval_intent_accuracy(eval_predictions: List[Dict]) -> float:
         if hybrid_session_intent(row) == row.get("session_intent"):
             hits += 1
     return round(hits / len(eval_predictions), 4)
+
+
+def hybrid_eval_danger_accuracy(eval_predictions: List[Dict]) -> float:
+    if not eval_predictions:
+        return 0.0
+    hits = 0
+    for row in eval_predictions:
+        _, hybrid_label = hybrid_danger(row)
+        if hybrid_label == row.get("danger_label"):
+            hits += 1
+    return round(hits / len(eval_predictions), 4)
+
+
+def hybrid_eval_danger_mae(eval_predictions: List[Dict]) -> float:
+    if not eval_predictions:
+        return 0.0
+    errors: List[float] = []
+    for row in eval_predictions:
+        hybrid_score, _ = hybrid_danger(row)
+        errors.append(abs(float(hybrid_score) - float(row.get("danger_score_target", 0.0))))
+    return round(sum(errors) / len(errors), 4)
 
 
 def main() -> None:
@@ -182,6 +191,8 @@ def main() -> None:
     run_stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
     metrics["eval_intent_accuracy_hybrid"] = hybrid_eval_intent_accuracy(eval_predictions)
+    metrics["eval_danger_label_accuracy_hybrid"] = hybrid_eval_danger_accuracy(eval_predictions)
+    metrics["eval_danger_mae_hybrid"] = hybrid_eval_danger_mae(eval_predictions)
 
     readiness = readiness_verdict(metrics)
     summary_row = {

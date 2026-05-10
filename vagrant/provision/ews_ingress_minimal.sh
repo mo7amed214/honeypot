@@ -113,10 +113,23 @@ usermod -aG docker "$USERNAME"
 docker network create l2_l3_integration 2>/dev/null || true
 
 # ── Level 2 (PERA) containers ───────────────────────────────────────────────
-# cd to PERA root so relative build contexts (./physics, ./blue_team/ingest)
-# resolve correctly in both the main and overlay compose files.
+# cd to the actual PERA compose root so relative build contexts
+# (./physics, ./blue_team/ingest) resolve correctly in both the main and
+# overlay compose files. The synced folder may either mount the repo root
+# directly at /opt/pera or nest it one level deeper.
 mkdir -p /var/log/pera
-cd /opt/pera
+PERA_ROOT="/opt/pera"
+if [ ! -f "${PERA_ROOT}/docker-compose.yml" ]; then
+  detected_pera_root="$(find /opt/pera -maxdepth 2 -type f -name docker-compose.yml -printf '%h\n' | head -n 1)"
+  if [ -n "${detected_pera_root}" ]; then
+    PERA_ROOT="${detected_pera_root}"
+  else
+    echo "ERROR: could not locate PERA docker-compose.yml under /opt/pera"
+    exit 1
+  fi
+fi
+
+cd "${PERA_ROOT}"
 docker compose \
   -f docker-compose.yml \
   -f blue_team/docker-compose.blueteam.yml \
