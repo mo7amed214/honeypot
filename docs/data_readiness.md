@@ -32,3 +32,6 @@ This repo now includes the minimum operational pieces needed before a sequence m
 6. Archive the resulting logs with `scripts/archive_telemetry_bundle.sh`
 7. Capture benign windows with `scripts/capture_benign_baseline.sh`
 8. Reset the lab with `scripts/reset_lab_state.sh`
+
+See `docs/telemetry_persistence_and_dashboards.md` before long collection runs
+for the Grafana/Influx/Loki wiring and the host-backed persistence options.

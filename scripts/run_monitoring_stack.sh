@@ -21,6 +21,14 @@ fi
 python3 "$ROOT_DIR/scripts/import_soc_dashboard.py"
 python3 "$ROOT_DIR/scripts/import_opcua_telemetry_dashboard.py"
 
+if [[ "${IMPORT_PERA_BLUE_TEAM_DASHBOARD:-0}" == "1" ]]; then
+  python3 "$ROOT_DIR/scripts/import_pera_blue_team_dashboard.py" \
+    --influx-url "${PERA_INFLUX_URL:-http://172.30.70.10:8086}" \
+    --influx-token "${PERA_INFLUX_TOKEN:-bt-supersecret-token-change-me}" \
+    --influx-org "${PERA_INFLUX_ORG:-thesis}" \
+    --influx-bucket "${PERA_INFLUX_BUCKET:-honeypot}"
+fi
+
 streamlit_healthy() {
   curl -fsS --max-time 3 http://127.0.0.1:8501/_stcore/health >/dev/null 2>&1
 }
@@ -51,6 +59,9 @@ fi
 
 echo "Grafana SOC: http://127.0.0.1:3000/d/adx2v2p/soc-honeypot-detection-dashboard"
 echo "Grafana OPC UA telemetry: http://127.0.0.1:3000/d/opcua-physics-telemetry/physics-aware-opc-ua-telemetry"
+if [[ "${IMPORT_PERA_BLUE_TEAM_DASHBOARD:-0}" == "1" ]]; then
+  echo "Grafana PERA Blue Team: http://127.0.0.1:3000/d/bt-ti-console/blue-team-purdue-l2-threat-intelligence-console"
+fi
 echo "Streamlit:   http://127.0.0.1:8501"
 echo "Wazuh:       https://127.0.0.1"
 

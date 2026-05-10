@@ -15,6 +15,7 @@ This repo contains a small ICS honeypot + SOC demo stack:
 - `scripts/` — helper scripts
 - `docs/` — schema and operations notes for replay, labeling, and capture workflows
   - `docs/lab_hardening.md` — operational guardrails for isolation, retention, and reset hygiene
+  - `docs/telemetry_persistence_and_dashboards.md` — dashboard datasource wiring and host-backed persistence
 
 ## Quick start (from repo root)
 
@@ -39,6 +40,10 @@ bash scripts/run_monitoring_stack.sh
 The helper starts Loki, Promtail, Grafana, the historian API proxy, imports both
 Grafana dashboards, and starts Streamlit. Promtail auto-discovers the
 `single-node_wazuh_logs` Docker volume when Wazuh is running.
+
+To import the PERA Blue Team InfluxDB dashboard into this Grafana too, set
+`IMPORT_PERA_BLUE_TEAM_DASHBOARD=1` and point `PERA_INFLUX_URL` at the PERA
+InfluxDB endpoint before running the helper.
 
 ### Historian plane (web + ingest)
 

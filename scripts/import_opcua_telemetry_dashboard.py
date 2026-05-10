@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 from pathlib import Path
@@ -7,12 +8,8 @@ from typing import Any
 from urllib import error, request
 
 
-GRAFANA_URL = "http://127.0.0.1:3000"
-AUTH = base64.b64encode(b"admin:admin").decode()
-HEADERS = {"Authorization": f"Basic {AUTH}", "Content-Type": "application/json"}
 DATASOURCE_UID = "historian-infinity"
 DATASOURCE_TYPE = "yesoreyeram-infinity-datasource"
-HISTORIAN_PROXY_URL = "http://host.docker.internal:5001"
 EXPORT_PATH = Path("monitoring/grafana/opcua_physics_telemetry_dashboard.json")
 
 TAGS = [
@@ -34,16 +31,30 @@ TAGS = [
 ]
 
 
-def http_json(path: str, method: str = "GET", payload: Any | None = None) -> Any:
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Import the OPC UA telemetry dashboard into Grafana.")
+    parser.add_argument("--grafana-url", default="http://127.0.0.1:3000")
+    parser.add_argument("--username", default="admin")
+    parser.add_argument("--password", default="admin")
+    parser.add_argument("--historian-url", default="http://host.docker.internal:5001")
+    return parser.parse_args()
+
+
+def auth_headers(username: str, password: str) -> dict[str, str]:
+    token = base64.b64encode(f"{username}:{password}".encode()).decode()
+    return {"Authorization": f"Basic {token}", "Content-Type": "application/json"}
+
+
+def http_json(base: str, headers: dict[str, str], path: str, method: str = "GET", payload: Any | None = None) -> Any:
     data = None if payload is None else json.dumps(payload).encode()
-    req = request.Request(f"{GRAFANA_URL}{path}", data=data, headers=HEADERS, method=method)
+    req = request.Request(f"{base.rstrip('/')}{path}", data=data, headers=headers, method=method)
     with request.urlopen(req, timeout=30) as resp:
         raw = resp.read().decode()
         return json.loads(raw) if raw else {}
 
 
-def ensure_datasource() -> None:
-    datasources = http_json("/api/datasources")
+def ensure_datasource(base: str, headers: dict[str, str], historian_url: str) -> None:
+    datasources = http_json(base, headers, "/api/datasources")
     existing = next((ds for ds in datasources if ds.get("uid") == DATASOURCE_UID), None)
     payload = {
         "uid": DATASOURCE_UID,
@@ -51,7 +62,7 @@ def ensure_datasource() -> None:
         "name": "Historian API",
         "type": DATASOURCE_TYPE,
         "access": "proxy",
-        "url": HISTORIAN_PROXY_URL,
+        "url": historian_url,
         "basicAuth": False,
         "isDefault": False,
         "jsonData": {"auth_method": "none", "global_queries": []},
@@ -60,12 +71,12 @@ def ensure_datasource() -> None:
     if existing:
         payload.update({"id": existing["id"], "version": existing.get("version", 1)})
         try:
-            http_json(f"/api/datasources/uid/{DATASOURCE_UID}", "PUT", payload)
+            http_json(base, headers, f"/api/datasources/uid/{DATASOURCE_UID}", "PUT", payload)
         except error.HTTPError as exc:
             if exc.code != 409:
                 raise
         return
-    http_json("/api/datasources", "POST", payload)
+    http_json(base, headers, "/api/datasources", "POST", payload)
 
 
 def historian_query(tag: str, ref_id: str = "A") -> dict[str, Any]:
@@ -196,9 +207,11 @@ def build_dashboard() -> dict[str, Any]:
 
 
 def main() -> None:
-    ensure_datasource()
+    args = parse_args()
+    headers = auth_headers(args.username, args.password)
+    ensure_datasource(args.grafana_url, headers, args.historian_url)
     dashboard = build_dashboard()
-    result = http_json("/api/dashboards/db", "POST", {"dashboard": dashboard, "folderId": 0, "overwrite": True})
+    result = http_json(args.grafana_url, headers, "/api/dashboards/db", "POST", {"dashboard": dashboard, "folderId": 0, "overwrite": True})
     EXPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     EXPORT_PATH.write_text(json.dumps(dashboard, indent=2), encoding="utf-8")
     print(json.dumps({"imported": True, "uid": dashboard["uid"], "url": result.get("url")}, indent=2))

@@ -77,7 +77,7 @@ local.file_match "ews_honeypot" {
       category  = "network",
     },
     {
-      __path__  = "/opt/honeypot/monitoring/wazuh/runtime/logs/alerts/alerts.json",
+      __path__  = "/opt/honeypot/monitoring/wazuh/live-alerts/alerts.json",
       job       = "ews_honeypot_wazuh",
       host      = "ews",
       role      = "level3_ews",
@@ -85,6 +85,26 @@ local.file_match "ews_honeypot" {
       source    = "honeypot",
       repo      = "honeypot",
       category  = "edr",
+    },
+    {
+      __path__  = "/opt/honeypot/monitoring/ml/integration_live_*.jsonl",
+      job       = "ews_honeypot_ml",
+      host      = "ews",
+      role      = "level3_ews",
+      component = "ml_correlator",
+      source    = "ml",
+      repo      = "honeypot",
+      category  = "session_correlation",
+    },
+    {
+      __path__  = "/opt/honeypot/services/historian/logs/*.jsonl",
+      job       = "ews_honeypot_historian",
+      host      = "ews",
+      role      = "level3_ews",
+      component = "historian",
+      source    = "honeypot",
+      repo      = "honeypot",
+      category  = "historian",
     },
   ]
   sync_period = "10s"
