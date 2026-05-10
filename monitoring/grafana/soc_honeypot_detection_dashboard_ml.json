@@ -477,7 +477,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "sum(last_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_historian_web_count [$__range])) or vector(0)",
+          "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_historian_web_count [$__range])) or vector(0)",
           "instant": true,
           "queryType": "instant",
           "refId": "A"
@@ -564,7 +564,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "sum(last_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_smb_access_count [$__range])) or vector(0)",
+          "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_smb_access_count [$__range])) or vector(0)",
           "instant": true,
           "queryType": "instant",
           "refId": "A"
@@ -651,7 +651,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "sum(last_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_opcua_path_count [$__range])) or vector(0)",
+          "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_opcua_path_count [$__range])) or vector(0)",
           "instant": true,
           "queryType": "instant",
           "refId": "A"
@@ -738,7 +738,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "sum(last_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_write_like_count [$__range])) or vector(0)",
+          "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_write_like_count [$__range])) or vector(0)",
           "instant": true,
           "queryType": "instant",
           "refId": "A"
@@ -825,7 +825,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "sum(last_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_critical_write_count [$__range])) or vector(0)",
+          "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_critical_write_count [$__range])) or vector(0)",
           "instant": true,
           "queryType": "instant",
           "refId": "A"
@@ -912,7 +912,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "sum(last_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_process_anomaly_count [$__range])) or vector(0)",
+          "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_process_anomaly_count [$__range])) or vector(0)",
           "instant": true,
           "queryType": "instant",
           "refId": "A"
@@ -1142,7 +1142,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "sum(last_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_process_anomaly_count [$__range])) or vector(0)",
+          "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_process_anomaly_count [$__range])) or vector(0)",
           "instant": true,
           "queryType": "instant",
           "refId": "A"
@@ -1229,7 +1229,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "sum(last_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_write_like_count [$__range])) or vector(0)",
+          "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_write_like_count [$__range])) or vector(0)",
           "instant": true,
           "queryType": "instant",
           "refId": "A"

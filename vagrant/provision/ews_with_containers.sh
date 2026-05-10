@@ -71,6 +71,9 @@ fi
 # Create Zeek log dir so the bind-mount in docker-compose doesn't fail
 mkdir -p /var/log/zeek
 
+# Compose expects this shared network to exist before startup.
+docker network create l2_l3_integration 2>/dev/null || true
+
 # Pull images and build services in the background so vagrant up returns quickly.
 # The containers start automatically on boot via restart: unless-stopped.
 docker compose \
