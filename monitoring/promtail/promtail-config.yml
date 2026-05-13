@@ -118,6 +118,29 @@ scrape_configs:
                 attack_stage: process_anomaly
                 asset_class: historian
 
+  - job_name: scada_l2_audit
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: scada_l2_audit
+          source: scada_l2
+          attack_stage: process_anomaly
+          asset_class: scada_l2
+          __path__: /var/log/honeypot-l2/scada_honeypot_audit.json
+    pipeline_stages:
+      - json:
+          expressions:
+            event_type: event_type
+            severity: severity
+            mitre_technique: mitre_technique
+            description: description
+            source: source
+      - labels:
+          event_type:
+          severity:
+          mitre_technique:
+
   - job_name: ml
     static_configs:
       - targets:
