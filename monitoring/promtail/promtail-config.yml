@@ -118,6 +118,44 @@ scrape_configs:
                 attack_stage: process_anomaly
                 asset_class: historian
 
+  - job_name: smb_access
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: smb_access
+          source: smb
+          attack_stage: smb_access
+          asset_class: smb
+          __path__: /var/log/smb/smbd.log
+    pipeline_stages:
+      - regex:
+          expression: '(?P<client_ip>\d+\.\d+\.\d+\.\d+)'
+      - labels:
+          client_ip:
+
+  - job_name: historian_events
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: historian_events
+          source: historian
+          attack_stage: historian_web
+          asset_class: historian
+          __path__: /var/log/honeypot/historian/events.jsonl
+    pipeline_stages:
+      - json:
+          expressions:
+            event_type: event_type
+            src_ip: src_ip
+            route: route
+            status: status
+      - labels:
+          event_type:
+          src_ip:
+          route:
+
   - job_name: scada_l2_audit
     static_configs:
       - targets:

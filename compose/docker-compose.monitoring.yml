@@ -37,6 +37,8 @@ services:
       - ${WAZUH_ALERTS_PATH:-/var/snap/docker/common/var-lib-docker/volumes/single-node_wazuh_logs/_data/alerts}:/var/ossec/logs/alerts:ro
       - ../monitoring/ml:/var/log/honeypot-ml:ro
       - ${PERA_AUDIT_LOG_PATH:-/opt/pera/PERA-integration-ready-/logs}:/var/log/honeypot-l2:ro
+      - ${SMB_LOG_PATH:-/var/lib/docker/volumes/compose_smb_logs/_data}:/var/log/smb:ro
+      - ../services/historian/logs:/var/log/honeypot/historian:ro
       - ../monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
       - ${PROMTAIL_POSITIONS_PATH:-promtail_positions}:/tmp
     depends_on:

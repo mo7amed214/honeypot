@@ -8,6 +8,7 @@ volumes:
   grafana_data:
   loki_data:
   promtail_positions:
+  smb_logs:
 
 services:
 
@@ -41,6 +42,9 @@ services:
     network_mode: host
     restart: unless-stopped
     mem_limit: 128m
+    volumes:
+      - ../services/smb/config/smb.conf:/etc/samba/smb.conf:ro
+      - smb_logs:/var/log/samba
 
   # ── Historian ────────────────────────────────────────────────────────────────
 

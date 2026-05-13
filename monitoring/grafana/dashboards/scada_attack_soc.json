@@ -226,6 +226,78 @@
           "legendFormat": "{{severity}}"
         }
       ]
+    },
+    {
+      "id": 40,
+      "type": "logs",
+      "title": "SMB Access Log — Bait File Reads (Docs share)",
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 6 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "expr": "{job=\"smb_access\"}",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "logs",
+      "title": "Historian Web Access — Attacker Visiting Bait Service",
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 6 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "expr": "{job=\"historian_events\"} | json | __error__=\"\" | event_type != \"grafana_latest\"",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "logs",
+      "title": "SCADA Recon — Plant State Reads + Nmap Probes (T0846 / T0888)",
+      "gridPos": { "x": 0, "y": 38, "w": 24, "h": 6 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "expr": "{job=\"scada_l2_audit\"} | json | __error__=\"\" | event_type =~ \"SCADA_READ|RECON_PROBE\"",
+          "legendFormat": ""
+        }
+      ]
     }
   ]
 }
