@@ -15,11 +15,13 @@ apt-get install -y \
   iproute2 \
   jq \
   net-tools \
+  nmap \
   openssh-server \
   python3 \
   python3-pip \
   python3-venv \
   rsync \
+  smbclient \
   sshpass \
   sudo \
   unzip

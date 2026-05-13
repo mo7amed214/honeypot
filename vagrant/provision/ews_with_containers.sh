@@ -77,6 +77,14 @@ if ! docker network inspect l2_l3_integration >/dev/null 2>&1; then
   docker network create l2_l3_integration >/dev/null
 fi
 
+# Drop the attack script into the user's home for demo convenience
+ATTACK_SRC="/opt/honeypot/PERA-integration-ready-/red_team/stealth_sabotage.py"
+if [[ -f "$ATTACK_SRC" ]]; then
+  cp "$ATTACK_SRC" "/home/${LEVEL3_USER}/stealth_sabotage.py"
+  chown "${LEVEL3_USER}:${LEVEL3_USER}" "/home/${LEVEL3_USER}/stealth_sabotage.py"
+  chmod +x "/home/${LEVEL3_USER}/stealth_sabotage.py"
+fi
+
 # Pull images and build services in the background so vagrant up returns quickly.
 # The containers start automatically on boot via restart: unless-stopped.
 docker compose \
