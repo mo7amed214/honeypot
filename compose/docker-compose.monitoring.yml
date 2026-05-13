@@ -3,13 +3,13 @@
 
 services:
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.2
     ports:
       - "${GRAFANA_PORT:-3001}:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
-      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
+      - GF_INSTALL_PLUGINS=
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/scada_attack_soc.json
     volumes:
       - ${GRAFANA_DATA_PATH:-grafana_data}:/var/lib/grafana
@@ -36,7 +36,7 @@ services:
     volumes:
       - ${WAZUH_ALERTS_PATH:-/var/snap/docker/common/var-lib-docker/volumes/single-node_wazuh_logs/_data/alerts}:/var/ossec/logs/alerts:ro
       - ../monitoring/ml:/var/log/honeypot-ml:ro
-      - ${PERA_AUDIT_LOG_PATH:-/opt/pera/logs}:/var/log/honeypot-l2:ro
+      - ${PERA_AUDIT_LOG_PATH:-/opt/pera/PERA-integration-ready-/logs}:/var/log/honeypot-l2:ro
       - ../monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
       - ${PROMTAIL_POSITIONS_PATH:-promtail_positions}:/tmp
     depends_on:
