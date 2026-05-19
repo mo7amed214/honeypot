@@ -264,9 +264,15 @@ Vagrant.configure("2") do |config|
         node.vm.guest = :windows
         node.vm.synced_folder ".", "C:/vagrant/honeypot"
       else
-        node.vm.synced_folder ".", "/opt/honeypot"
+        # Mount as root:root, mode 750 — EWS operator (john) must not
+        # browse compose files or cross-level infrastructure source.
+        node.vm.synced_folder ".", "/opt/honeypot",
+          owner: "root", group: "root",
+          mount_options: ["dmode=750", "fmode=640"]
         if name == "ews" && File.directory?(File.expand_path("../PERA-integration-ready-", __dir__))
-          node.vm.synced_folder "../PERA-integration-ready-", "/opt/pera"
+          node.vm.synced_folder "../PERA-integration-ready-", "/opt/pera",
+            owner: "root", group: "root",
+            mount_options: ["dmode=750", "fmode=640"]
         end
       end
 

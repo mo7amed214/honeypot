@@ -40,8 +40,10 @@ fi
 configure_dns
 systemctl restart docker 2>/dev/null || true
 
-# Allow the honeypot user to run docker without sudo
-usermod -aG docker "${LEVEL3_USER}"
+# Do NOT add EWS user to the docker group.
+# Docker socket access would expose all container internals (networks, envs,
+# compose configs) across Purdue levels — a direct Purdue boundary violation.
+# All container management is root-only.
 
 # If a second NIC exists for the integration plane, configure its static IP via
 # netplan. Vagrant adds the NIC but doesn't configure it inside the guest when
@@ -91,3 +93,10 @@ docker compose \
   -f /opt/honeypot/compose/docker-compose.level3.yml \
   --profile monitoring \
   up -d --build
+
+# Lock down infrastructure directories from the EWS operator account.
+# john is a plant engineer — compose files, PERA source, and ML code
+# are root-owned infrastructure, not operator tools.
+chmod 700 /opt/honeypot
+chmod 700 /opt/pera 2>/dev/null || true
+chown -R root:root /opt/honeypot /opt/pera 2>/dev/null || true

@@ -34,12 +34,12 @@ if ! id -u "$USERNAME" >/dev/null 2>&1; then
 fi
 
 echo "${USERNAME}:${PASSWORD}" | chpasswd
-usermod -aG sudo "$USERNAME"
 
-cat >"/etc/sudoers.d/90-${USERNAME}" <<EOF
-${USERNAME} ALL=(ALL) NOPASSWD:ALL
-EOF
-chmod 0440 "/etc/sudoers.d/90-${USERNAME}"
+# EWS operator: no sudo, no docker socket access.
+# Purdue Level 3 EWS user is a plant engineer — not a sysadmin.
+# Docker/compose infrastructure must remain opaque to this account.
+gpasswd -d "$USERNAME" sudo 2>/dev/null || true
+rm -f "/etc/sudoers.d/90-${USERNAME}"
 
 if grep -qE '^#?PasswordAuthentication' /etc/ssh/sshd_config; then
   sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
