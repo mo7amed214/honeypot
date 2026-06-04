@@ -46,7 +46,12 @@ def main() -> None:
 
     encoded = encode_examples(examples, vocabs)
     loader = DataLoader(SessionDataset(encoded), batch_size=len(encoded), shuffle=False, collate_fn=collate_batch)
-    model = SessionLSTM(vocabs=vocabs, hidden_size=hidden_size)
+    model = SessionLSTM(
+        vocabs=vocabs,
+        hidden_size=hidden_size,
+        num_layers=int(checkpoint["config"].get("num_layers", 2)),
+        bidirectional=bool(checkpoint["config"].get("bidirectional", False)),
+    )
     model.load_state_dict(checkpoint["model_state"])
 
     danger_label_reverse = {index: value for value, index in vocabs["danger_label"].items()}

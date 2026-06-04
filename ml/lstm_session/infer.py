@@ -47,7 +47,12 @@ def main() -> None:
     encoded = encode_examples([example], vocabs)
     batch = collate_batch(encoded)
 
-    model = SessionLSTM(vocabs=vocabs, hidden_size=int(checkpoint["config"]["hidden_size"]))
+    model = SessionLSTM(
+        vocabs=vocabs,
+        hidden_size=int(checkpoint["config"]["hidden_size"]),
+        num_layers=int(checkpoint["config"].get("num_layers", 2)),
+        bidirectional=bool(checkpoint["config"].get("bidirectional", False)),
+    )
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
     with torch.no_grad():

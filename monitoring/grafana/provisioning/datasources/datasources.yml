@@ -11,11 +11,12 @@ datasources:
     editable: true
 
   # Infinity — live polling of historian REST API for physics telemetry
-  - name: Historian
-    type: yesoreyeram-infinity-datasource
-    uid: historian-infinity
-    access: proxy
-    url: http://host.docker.internal:5000
-    editable: true
-    jsonData:
-      tlsSkipVerify: true
+  # Temporarily disabled to avoid UID conflict on fresh container start
+  # - name: Historian
+  #   type: yesoreyeram-infinity-datasource
+  #   uid: historian-infinity
+  #   access: proxy
+  #   url: http://host.docker.internal:5000
+  #   editable: true
+  #   jsonData:
+  #     tlsSkipVerify: true

@@ -71,4 +71,11 @@
     <group>historian,application,anomaly,</group>
   </rule>
 
+  <rule id="100210" level="7">
+    <if_sid>100200</if_sid>
+    <field name="event_type">query_history</field>
+    <description>Historian unauthenticated tag-history endpoint accessed.</description>
+    <group>historian,application,web,</group>
+  </rule>
+
 </group>

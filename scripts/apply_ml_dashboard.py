@@ -9,7 +9,7 @@ from urllib import request
 
 
 ML_ROW_TITLE = "ML Correlated Sessions"
-ML_PANEL_IDS = {90, 91, 92, 93, 94, 95, 96, 97, 98}
+ML_PANEL_IDS = {90, 91, 92, 93, 94, 95, 96, 97, 98, 100, 101, 102, 103}
 SESSION_PANEL_TITLE_OVERRIDES = {
     "Primary rule (24h)": "Primary rule (session)",
     "Top high-risk rule (24h)": "Top high-risk rule (session)",
@@ -304,6 +304,40 @@ def build_ready_panels() -> List[Dict[str, Any]]:
             24,
             8,
         ),
+        build_stat_panel(
+            100,
+            "LSTM danger accuracy",
+            "Held-out danger-label accuracy of the SessionAttentionLSTM (observable evidence only, no ground-truth at inference).",
+            'last_over_time({job="ml",source="ml",kind="model_summary"} | json | unwrap eval_danger_label_accuracy [30d])',
+            0,
+            unit="percentunit",
+            thresholds={"mode": "absolute", "steps": [{"color": "red", "value": 0}, {"color": "orange", "value": 0.7}, {"color": "green", "value": 0.85}]},
+        ),
+        build_stat_panel(
+            101,
+            "5-fold CV danger (mean)",
+            "Mean danger-label accuracy across 5 stratified group folds. Confirms the result is not a single-split artefact.",
+            'last_over_time({job="ml",source="ml",kind="model_summary"} | json | unwrap kfold_mean_danger_accuracy [30d])',
+            6,
+            unit="percentunit",
+            thresholds={"mode": "absolute", "steps": [{"color": "red", "value": 0}, {"color": "orange", "value": 0.7}, {"color": "green", "value": 0.85}]},
+        ),
+        build_stat_panel(
+            102,
+            "Rule-based baseline danger",
+            "Max-rule-level heuristic baseline danger accuracy. LSTM gain = LSTM acc − this value.",
+            'last_over_time({job="ml",source="ml",kind="model_summary"} | json | unwrap baseline_rulebased_danger_accuracy [30d])',
+            12,
+            unit="percentunit",
+            thresholds={"mode": "absolute", "steps": [{"color": "green", "value": 0}, {"color": "orange", "value": 0.6}, {"color": "red", "value": 0.85}]},
+        ),
+        build_stat_panel(
+            103,
+            "Training sessions",
+            "Total unique base sessions used to train the current model (live + curated).",
+            'last_over_time({job="ml",source="ml",kind="model_summary"} | json | unwrap unique_base_sessions [30d])',
+            18,
+        ),
     ]
 
 
@@ -385,6 +419,7 @@ def main() -> None:
     stat_y = max_bottom + 3
     logs_y = stat_y + 5
     queue_y = logs_y + 9
+    model_quality_y = queue_y + 8
     for panel in ml_panels:
         if panel["id"] == 98:
             panel["gridPos"]["y"] = max_bottom + 1
@@ -396,6 +431,9 @@ def main() -> None:
             panel["gridPos"]["y"] = logs_y
         if panel["id"] == 97:
             panel["gridPos"]["y"] = queue_y
+    for panel in ml_panels:
+        if panel["id"] in {100, 101, 102, 103}:
+            panel["gridPos"]["y"] = model_quality_y
     panels.extend([ml_row, *ml_panels])
     dashboard["panels"] = panels
     dashboard["version"] = int(payload["meta"]["version"])
