@@ -1,3 +1,22 @@
+"""
+SessionAttentionLSTM — model definition, training loop, and baseline classifiers.
+
+Trains a bidirectional LSTM with query-based attention on labelled attacker
+sessions assembled by session_builder.py.  The model outputs three heads:
+
+  - danger_label   : {low, medium, high, critical}
+  - dominant_stage : multi-class over the stage vocabulary
+  - session_intent : {benign_operations, discovery_scan, host_recon,
+                       credential_access, collection, ot_recon, ot_impact}
+
+Usage (via Docker Compose):
+    docker compose -f compose/docker-compose.ml.yml run --rm lstm-session-model \\
+        python -m ml.lstm_session.train --epochs 40 --hidden 64 --layers 2
+
+Or via the convenience wrapper:
+    bash scripts/train_lstm_session_model.sh
+"""
+
 from __future__ import annotations
 
 import argparse

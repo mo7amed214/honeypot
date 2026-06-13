@@ -1,3 +1,28 @@
+"""
+Historian web portal — deception asset mimicking an industrial process historian.
+
+Serves a FastAPI web application that presents as an OSIsoft PI Web API endpoint.
+Process tag values are streamed in continuously from the OPC UA server via the
+opcua_ingest.py background task and stored in a local SQLite database.
+
+Deception design:
+  - HTTP response headers impersonate Microsoft-IIS / PI Web API to increase
+    realism and resist fingerprinting by generic web scanners.
+  - Authentication uses weak default credentials (john / Cisco) that also appear
+    in the SMB honey share, establishing the cross-layer credential-reuse lure.
+  - All login attempts, API queries, and anomalous ingest values are emitted as
+    structured events via event_logger.py for downstream Wazuh and Zeek detection.
+
+Environment variables:
+  DB_PATH              Path to the SQLite database  (default: historian.db)
+  HISTORIAN_USERNAME   Login username               (default: john)
+  HISTORIAN_PASSWORD   Login password               (default: Cisco)
+  SERVER_BASE          Public base URL for link generation
+
+Start via Docker Compose:
+  docker compose -f compose/docker-compose.historian.yml up -d
+"""
+
 import base64
 import os
 import sqlite3

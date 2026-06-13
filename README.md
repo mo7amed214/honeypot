@@ -1,154 +1,408 @@
-# ICS Honeypot (thesis demo)
+# Level 3 Industrial Honeynet
 
-This repo contains a small ICS honeypot + SOC demo stack:
+> A high-interaction industrial control system honeynet focused on Purdue Level 3
+> (Site Operations), with a three-layer detection stack and a session-scoped ML
+> classification pipeline.
 
-- Historian service (web UI + OPC UA ingest)
-- Optional standalone OPC UA server
-- Monitoring plane (Grafana + Loki + Promtail) to visualize detections (e.g., Zeek/Wazuh)
+**Bachelor's Thesis — German University in Cairo (GUC), 2026**  
+Supervised by Dr. Amr Mohamed Saber
 
-## Repository layout
+---
 
-- `compose/` — Docker Compose entrypoints (historian-only, monitoring-only, legacy fullstack)
-- `services/` — application services (e.g., historian, opcua)
-- `monitoring/` — monitoring + detection configs (Promtail/Loki, Wazuh rules, Zeek, Sysmon)
-- `demos/` — Streamlit demos used for the presentation
-- `scripts/` — helper scripts
-- `docs/` — schema and operations notes for replay, labeling, and capture workflows
-  - `docs/lab_hardening.md` — operational guardrails for isolation, retention, and reset hygiene
-  - `docs/telemetry_persistence_and_dashboards.md` — dashboard datasource wiring and host-backed persistence
+## What This Is
 
-## Quick start (from repo root)
+Industrial cyberattacks — from Stuxnet to the 2015 Ukraine power grid incident —
+unfold at **Purdue Level 3**: the control room layer where engineers manage
+production. Most deception-based defences focus on lower OT layers or the
+enterprise perimeter. Level 3 is the gap.
 
-### Wazuh runtime
+This project builds a fully reproducible Level 3 honeynet for a discrete
+manufacturing assembly-line setting. It combines:
 
-```bash
-bash scripts/run_wazuh_stack.sh
+- **Four deception assets** that look and behave like a real factory control room
+- **Three independent monitoring layers** (network, host, application) feeding a
+  unified Grafana SOC dashboard
+- **A session-level ML pipeline** (`SessionAttentionLSTM`) that classifies full
+  attacker sessions rather than individual alerts — achieving 94.7% danger-label
+  accuracy and raising a critical alert one full step before the most destructive
+  attack phase
+
+### Headline Results
+
+| Metric | Value |
+|---|---|
+| Kill chain detection coverage | 7 / 7 instrumented phases (100%) |
+| ML danger-label accuracy | 94.70% |
+| 5-fold cross-validation mean | 97.59% |
+| Improvement over rule-based baseline | +40 percentage points |
+| Early warning lead time | 1 phase before tag manipulation |
+| AI adversarial validation | Every action detected (Claude Opus, unscripted) |
+
+---
+
+## Architecture
+
+```
+                      ┌───────────────────────────────────────────────┐
+  ATTACKER            │           LEVEL 3 — SITE OPERATIONS            │
+  (external) ───────► │                                                 │
+                      │  ┌──────────────┐    ┌───────────────────────┐ │
+  Level 3.5           │  │     EWS       │    │  Operational File     │ │
+  Jump Host ─SSH/RDP─►│  │ Windows 11   │    │  Share  (SMB / 445)   │ │
+                      │  │ SSH + RDP    │    │  Honey credentials    │ │
+                      │  └──────┬───────┘    └───────────────────────┘ │
+                      │         │ Historian access                       │
+                      │         ▼                  OPC UA telemetry     │
+  LEVEL 2             │  ┌──────────────┐  ◄──────────────────────────┤
+  OPC UA server ──────►  │  Historian   │                               │
+  (physics sim)       │  │  Web Portal  │                               │
+                      │  └──────────────┘                               │
+                      └───────────────────────────────────────────────┘
+                                      │ telemetry
+                                      ▼
+                      ┌───────────────────────────────────────────────┐
+                      │          MONITORING & TELEMETRY LAYER          │
+                      │                                                 │
+                      │  Sysmon  — Windows host events (EWS)           │
+                      │  Zeek    — passive network sensor               │
+                      │  Wazuh   — SIEM, correlation, alerting          │
+                      │                                                 │
+                      │  └─► Grafana SOC Dashboard  :3000              │
+                      │  └─► SessionAttentionLSTM   (session ML)       │
+                      └───────────────────────────────────────────────┘
 ```
 
-This starts the reproducible Wazuh Manager/Indexer/Dashboard stack from this
-repo and generates local certificates if they are missing. It also opens the
-manager ports for lab agents from `192.168.1.0/24` by default. Override that
-with `WAZUH_AGENT_CIDR`, or set `WAZUH_CONFIGURE_FIREWALL=0` if you want to
-manage firewall rules yourself.
+---
 
-### Monitoring plane (Grafana/Loki/Promtail/Streamlit)
+## Repository Layout
 
-```bash
-bash scripts/run_monitoring_stack.sh
+```
+honeypot/
+│
+├── services/
+│   ├── historian/          # FastAPI web portal — process historian (time-series store)
+│   ├── opcua/              # OPC UA server with stateful physics simulation (15 tags)
+│   ├── smb/                # Samba honey share with credential-adjacent honey files
+│   └── ews/                # EWS provisioning scripts (Vagrant / VirtualBox / Windows 11)
+│
+├── ml/
+│   └── lstm_session/       # SessionAttentionLSTM — train, infer, publish
+│       ├── train.py                    # Model architecture + training loop
+│       ├── session_builder.py          # Session assembly, encoding, vocabulary
+│       ├── infer.py                    # Single-session inference CLI
+│       ├── session_detection.py        # Live Loki polling → real-time session builder
+│       ├── publish_live_session.py     # Writes predictions back to Loki
+│       └── generate_curated_sessions.py  # Synthetic session corpus generation
+│
+├── monitoring/
+│   ├── grafana/            # Dashboard JSON provisioning (SOC + OPC UA telemetry)
+│   ├── wazuh/              # 26 custom detection rules (severity levels 4–13)
+│   ├── zeek/               # Zeek scripts, including ARP MITM detector (rule 100308)
+│   ├── loki/               # Loki log aggregation config
+│   ├── promtail/           # Promtail scrape config (Wazuh + historian + ML output)
+│   └── ml/                 # ML pipeline output — session JSONlines published to Loki
+│
+├── demos/
+│   ├── streamlit_demo.py   # 8-phase interactive attack console (live SSH execution)
+│   └── payloads/           # Tag manipulation payload used in Phase 8
+│
+├── compose/                # Docker Compose entrypoints (historian, monitoring, ML, Wazuh)
+├── scripts/                # Deployment, smoke-test, and operations helpers
+├── vagrant/                # Reproducible VM lab definition (5-VM Vagrantfile)
+├── integrations/           # Level 3.5 ingress contract for external integration tests
+├── docs/                   # Architecture notes, lab hardening, telemetry schemas
+└── artifacts/              # Scenario run outputs — ground_truth.jsonl per session
 ```
 
-The helper starts Loki, Promtail, Grafana, the historian API proxy, imports both
-Grafana dashboards, and starts Streamlit. Promtail auto-discovers the
-`single-node_wazuh_logs` Docker volume when Wazuh is running.
+---
 
-To import the PERA Blue Team InfluxDB dashboard into this Grafana too, set
-`IMPORT_PERA_BLUE_TEAM_DASHBOARD=1` and point `PERA_INFLUX_URL` at the PERA
-InfluxDB endpoint before running the helper.
+## Prerequisites
 
-### Historian plane (web + ingest)
+| Dependency | Version | Purpose |
+|---|---|---|
+| Docker + Docker Compose v2 | ≥ 24 | All containerised services |
+| Python | 3.11+ | ML pipeline, scripts |
+| PyTorch | CPU is sufficient | SessionAttentionLSTM |
+| Vagrant + VirtualBox | any recent | Full VM lab only |
+
+---
+
+## Quick Start
+
+### 1 — Start the monitoring stack
 
 ```bash
-docker compose -f compose/docker-compose.historian.yml up -d
+bash scripts/run_wazuh_stack.sh         # Wazuh Manager + Indexer + Dashboard
+bash scripts/run_monitoring_stack.sh    # Grafana + Loki + Promtail
 ```
 
-Or, to also start the local OPC UA server (if not already listening on port 4840):
+| Dashboard | URL | Default credentials |
+|---|---|---|
+| Grafana SOC | http://localhost:3000 | `admin / admin` |
+| Wazuh | https://localhost | `admin / SecretPassword` |
+
+### 2 — Start the deception services
 
 ```bash
-bash scripts/run_historian_stack.sh
+bash scripts/run_historian_stack.sh     # Historian portal + OPC UA server
 ```
 
-### Demos (Streamlit)
+Historian portal opens at **http://localhost:5000** (login: `john / Cisco`)
+
+### 3 — Launch the interactive attack console
 
 ```bash
-pip install -r demos/requirements.txt
 bash scripts/run_streamlit_demo.sh
 ```
 
-Default ports:
+Attack console: **http://localhost:8501**
 
-- Grafana: `http://localhost:3000`
-- Loki: `http://localhost:3100`
-- Historian web: `http://localhost:5000`
-- Streamlit demo: `http://localhost:8501`
+Steps through an 8-phase kill chain with live SSH execution against the EWS.
+Evidence panels show Grafana and Wazuh alerts after each phase.
 
-## Reproducible VM lab (Vagrant)
+### 4 — Run the ML pipeline
 
-This repo now includes a Vagrant scaffold for a reproducible Level 3 lab.
+```bash
+bash scripts/train_lstm_session_model.sh    # Train on collected artifacts
+bash scripts/run_ml_pipeline.sh            # Infer + publish to Loki + Grafana
+```
 
-Default profile: `laptop1-safe`
+Model output lands in `ml/runs/latest/`. The SOC dashboard updates automatically.
 
-- `ews` at `192.168.56.5`
-- `smb` at `192.168.56.7`
-- `historian` at `192.168.56.10`
-- `opcua` at `192.168.56.11`
-- `zeek` at `192.168.56.13`
+---
 
-Additional profiles:
+## Full VM Lab (Vagrant)
 
-- `laptop1-bridge` for a near-live bridged replay of the real VirtualBox layout
-- `integration` for the clean `172.30.70.x` Level 3.5 contract
-
-Bring the lab up with:
+Reproduces the full isolated two-laptop lab topology with five VMs:
 
 ```bash
 bash scripts/run_vagrant_lab.sh
 ```
 
-To switch profiles:
+| VM | IP | Role |
+|---|---|---|
+| ews | 192.168.56.5 | Engineering Workstation (Windows 11 Enterprise) |
+| smb | 192.168.56.7 | Operational file share |
+| historian | 192.168.56.10 | Process historian portal |
+| opcua | 192.168.56.11 | OPC UA server |
+| zeek | 192.168.56.13 | Passive network sensor |
 
-```bash
-export HONEYPOT_VAGRANT_PROFILE=integration
-```
-
-Smoke test the Level 3 ingress contract with:
+Smoke-test the lab after provisioning:
 
 ```bash
 bash scripts/smoke_vagrant_lab.sh
 ```
 
-Default lab credentials on the Vagrant-managed guests:
+Default credentials on all Vagrant guests: `john / Cisco`
 
-- username: `john`
-- password: `Cisco`
+See [vagrant/README.md](vagrant/README.md) for profile switching and the Windows
+EWS box setup guide.
 
-More detail is in [vagrant/README.md](vagrant/README.md).
-For a real Windows EWS instead of the Linux fallback, see
-[vagrant/windows_ews_box.md](vagrant/windows_ews_box.md).
-The Windows box is too large for normal git history; install it from a release,
-Git LFS object, shared artifact, or the Windows laptop with
-`bash scripts/install_ews_windows_box.sh`.
-The thesis host-by-host architecture is documented in
-[docs/thesis_honeypot_architecture.md](docs/thesis_honeypot_architecture.md).
+---
 
-## Minimal Level 3.5 integration surface
+## ML Pipeline — SessionAttentionLSTM
 
-If you only need the first Level 3 pivot target for integration, use the
-minimal ingress contract instead of the full lab:
+Rather than classifying individual alerts, the pipeline assembles each attacker
+interaction into a **session** — an ordered sequence of events — and classifies
+the session as a whole.
 
-```bash
-bash scripts/run_level35_ingress.sh
-bash scripts/smoke_level35_ingress.sh
+```
+Raw telemetry  (Wazuh alerts · Zeek logs · Sysmon events)
+        │
+        ▼
+  Session Builder
+  Groups events by session ID, maps rule IDs to attack-stage labels,
+  expands each session into N progressive prefixes for training.
+        │
+        ▼
+  Encoder
+  Maps 6 categorical fields (asset class, source/target asset, event kind,
+  rule ID, agent name) to embedding indices.
+  Appends 5 numeric features per timestep (rule level, duration, …).
+        │
+        ▼
+  SessionAttentionLSTM
+  ┌─ Embedding layers  (6 categorical fields × learned dims)
+  ├─ Bidirectional LSTM  (hidden = 64, 2 layers)
+  ├─ Query-based attention  (context vector over all hidden states)
+  ├─ Dropout  (p = 0.20)
+  └─ Three output heads:
+       ├─ danger_label    → {low, medium, high, critical}
+       ├─ dominant_stage  → multi-class over stage vocabulary
+       └─ session_intent  → {benign_operations, discovery_scan, host_recon,
+                              credential_access, collection, ot_recon, ot_impact}
+        │
+        ▼
+  Hybrid Scoring Overlay
+  Deterministic path rules (e.g. opcua_write → ot_impact) override the model
+  output for high-confidence paths, ensuring critical-path sessions are never
+  under-scored.
+        │
+        ▼
+  Loki Publication → Grafana SOC Dashboard (10 s auto-refresh)
 ```
 
-That provides:
+### Training corpus
 
-- host: `172.30.70.10`
-- port: `22`
-- login: `john / Cisco`
-- role: Level 3 `EWS` / operator workstation
+- **1,682** labelled training examples
+- **369** unique sessions
+- **7** intent classes
+- **26** custom Wazuh detection rules
 
-More detail is in [integrations/level35/README.md](integrations/level35/README.md).
+### Accuracy results (held-out test set)
 
-## Operations helpers
+| Classifier | Danger label | Attack stage | Session intent |
+|---|---|---|---|
+| Majority class baseline | 45% | 28% | 44% |
+| Rule-based baseline | 54% | 19% | 53% |
+| **SessionAttentionLSTM** | **94.70%** | **94.45%** | **95.12%** |
+| — with hybrid overlay | — | — | **100%** |
+| 5-fold cross-validation | **97.59%** | — | — |
 
-- `bash scripts/check_zeek_pipeline.sh` — validate Zeek live capture and relay propagation
-- `bash scripts/smoke_zeek_wazuh_loki.sh` — inject labeled smoke marker and verify Loki/Wazuh flow
-- `docs/zeek_virtualbox_east_west.md` — recommended Zeek placement when VMs live on a different VirtualBox host
-- `bash scripts/check_lab_time_sync.sh` — compare UTC time across the monitoring host and reachable lab assets
-- `bash scripts/replay_attack_scenario.sh` — run a labeled live replay and write a ground-truth manifest
-- `bash scripts/validate_honeypot_readiness.sh` — run a full replay plus alert verification for host, app, and OT coverage
-- `bash scripts/demo_green_check.sh` — short pass/fail check for Zeek, Wazuh, and Loki demo readiness
-- `bash scripts/archive_telemetry_bundle.sh <scenario-id>` — snapshot Zeek, Wazuh, and historian logs into an archive
-- `bash scripts/capture_benign_baseline.sh <duration-seconds> [scenario-id]` — collect a benign capture window and archive it
-- `bash scripts/reset_lab_state.sh` — clean up non-destructive demo residue and stop MITM tooling
-- `bash scripts/apply_ews_host_telemetry.sh` — enable EWS PowerShell logging and Wazuh collection for script blocks
+### Early warning
+
+The model escalates to `CRITICAL` at Phase 7 (ARP adversary-in-the-middle) —
+one full phase before the tag manipulation payload executes at Phase 8. An
+analyst receives a critical-priority alert before any process value is falsified.
+
+### Training
+
+```bash
+bash scripts/train_lstm_session_model.sh
+```
+
+Or directly via Docker Compose:
+
+```bash
+docker compose -f compose/docker-compose.ml.yml run --rm lstm-session-model \
+  python -m ml.lstm_session.train --epochs 40 --hidden 64 --layers 2
+```
+
+### Single-session inference
+
+```bash
+docker compose -f compose/docker-compose.ml.yml run --rm lstm-session-model \
+  python ml/lstm_session/infer.py \
+  --model-path ml/runs/latest/model.pt \
+  --session-file artifacts/scenario-runs/<session-id>/ground_truth.jsonl
+```
+
+---
+
+## Deception Assets
+
+| Asset | Protocol | Port | Deception role |
+|---|---|---|---|
+| Engineering Workstation (EWS) | SSH / RDP | 22, 3389 | Primary high-interaction host; Windows 11 Enterprise with honey files on desktop |
+| Historian portal | HTTP | 5000 | Process data web portal with live OPC UA ingest; realistic PI Web API HTTP surface |
+| SMB file share | SMB | 445 | Operational documents including credential-adjacent honey files that lure attackers to EWS |
+| OPC UA server | OPC UA | 4840 | 15 stateful process tags driven by physics simulation; any node enumeration is an IOC |
+
+All four assets intentionally share a single credential pair (`john / Cisco`) to
+maximise cross-layer evidence generation — a single discoverable credential is
+sufficient to guide an attacker through every Level 3 asset without additional
+lure mechanisms.
+
+---
+
+## Kill Chain Detection Coverage
+
+| Phase | MITRE Technique | Detected by | Result |
+|---|---|---|---|
+| 1 — Initial foothold | T0866 | Out of scope by design | — |
+| 2 — Network discovery | T0846 | Zeek — network scan | **DETECTED** |
+| 3 — SMB credential harvest | T0811 | Zeek — SMB file access | **DETECTED** |
+| 4 — Pivot to EWS | T0866 | Wazuh — logon event | **DETECTED** |
+| 5 — Historian access | T0802 | Zeek + historian application | **DETECTED** |
+| 6 — OPC UA reconnaissance | T0861 | Zeek — OPC UA connection | **DETECTED** |
+| 7 — ARP adversary-in-the-middle | T0830 | Zeek — ARP poisoning | **DETECTED** |
+| 8 — Tag manipulation | T0831 | Zeek + Wazuh + historian | **DETECTED** |
+
+981 Wazuh alerts generated across the kill chain window. 5 MITRE ATT&CK tactic
+families detected. Phases 7 and 8 triggered simultaneous alerts from both the
+network layer (Zeek) and the host layer (Wazuh) — independent dual confirmation.
+
+---
+
+## Dashboards
+
+After running the full stack, three Grafana dashboards are available at
+**http://localhost:3000**:
+
+| Dashboard | Purpose |
+|---|---|
+| SOC Honeypot Detection | Kill chain timeline, ML session predictions, Wazuh alert feed, session intent panel |
+| OPC UA Process Telemetry | Live tag values and anomaly markers from the physics simulation |
+| Wazuh Events | Raw alert stream with MITRE ATT&CK tactic mapping |
+
+---
+
+## Adversarial Validation
+
+An AI agent (Claude Opus) was given one credential pair and no other information.
+
+**Task:** find every accessible asset and reach the deepest level of access possible.
+
+| What the agent did | What the honeynet caught |
+|---|---|
+| Found all 4 Level 3 assets independently | SSH logon — Wazuh |
+| Retrieved credentials from SMB (no password) | Network scan — Zeek (45 s latency) |
+| Authenticated to historian with found credentials | SMB file read — Zeek (file level) |
+| Enumerated all 15 OPC UA process tags | Historian login + API queries — Zeek |
+| Executed tag manipulation payload | OPC UA write frames — Zeek |
+| Identified the false OPC UA document | Historian ingest anomaly — historian app |
+
+Every action was detected. The deception layer held under fully unscripted
+adversarial pressure.
+
+---
+
+## Operations Reference
+
+```bash
+# Validate Zeek capture and relay pipeline
+bash scripts/check_zeek_pipeline.sh
+
+# Inject a smoke marker and verify end-to-end Loki/Wazuh flow
+bash scripts/smoke_zeek_wazuh_loki.sh
+
+# Run a labeled live replay and write a ground-truth manifest
+bash scripts/replay_attack_scenario.sh
+
+# Full replay + alert verification for host, app, and OT coverage
+bash scripts/validate_honeypot_readiness.sh
+
+# Quick pass/fail check for demo readiness (Zeek, Wazuh, Loki)
+bash scripts/demo_green_check.sh
+
+# Snapshot Zeek, Wazuh, and historian logs into an archive
+bash scripts/archive_telemetry_bundle.sh <scenario-id>
+
+# Collect a benign capture baseline
+bash scripts/capture_benign_baseline.sh <duration-seconds> [scenario-id]
+
+# Clean demo residue and stop MITM tooling
+bash scripts/reset_lab_state.sh
+```
+
+---
+
+## Thesis Context
+
+**Title:** Building a Decoy System in an Industrial Setting —
+Modelling Purdue Level 3 for an Industrial Deception System  
+**Institution:** German University in Cairo (GUC)  
+**Year:** 2026  
+**Supervisor:** Dr. Amr Mohamed Saber
+
+The thesis covers five identified literature gaps (no prior Level 3 focus, no
+cross-layer telemetry correlation, no analyst-ready ML output, fixed
+non-modular architectures, no realistic open-source OPC UA simulation) and
+addresses each directly. This repository is the complete, reproducible
+implementation artefact.
+
+---
+
+## License
+
+MIT

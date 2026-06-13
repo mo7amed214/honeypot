@@ -1,3 +1,19 @@
+"""
+Session builder — assembles raw telemetry events into labelled training examples.
+
+Reads ground-truth manifests (artifacts/scenario-runs/*/ground_truth.jsonl) and
+live detection session files, groups records by session ID, maps rule IDs to
+attack-stage labels, and expands each full session into N progressive prefix
+examples so the model learns attack build-up across partial sessions.
+
+Key exports used by train.py and infer.py:
+  - build_all_vocabs()       : builds categorical-field vocabularies from corpus
+  - build_examples()         : manifest → list of labelled session examples
+  - encode_examples()        : maps categorical fields to integer indices
+  - grouped_split()          : stratified train/val/test split by session intent
+  - DANGER_LABEL_TO_SCORE    : canonical danger-label → numeric score mapping
+"""
+
 from __future__ import annotations
 
 import json

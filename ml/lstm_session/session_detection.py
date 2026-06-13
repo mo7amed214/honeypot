@@ -1,3 +1,18 @@
+"""
+Live session detection — polls Loki for new telemetry and assembles attacker sessions.
+
+Continuously queries the Loki log aggregation endpoint for Wazuh alerts, Zeek
+detections, and historian application events.  Incoming log lines are grouped by
+session ID, normalised to the common event schema, and written to per-session
+JSONL files that the ML inference pipeline consumes.
+
+Environment variables:
+  LIVE_LOKI_QUERY_URL   Loki base URL (default: http://host.docker.internal:3100)
+
+Typical invocation (inside the monitoring Docker network):
+  python -m ml.lstm_session.session_detection
+"""
+
 from __future__ import annotations
 
 import json
