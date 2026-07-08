@@ -425,7 +425,10 @@ def read_recent_opcua_connection_events(cutoff: float) -> List[Dict[str, Any]]:
 
 
 def read_recent_auth_events(cutoff: float) -> List[Dict[str, Any]]:
-    if not AUTH_LOG.exists():
+    if not AUTH_LOG.is_file():
+        # .exists() alone isn't enough: a bind mount of a host path that
+        # doesn't exist yet gets silently created as an empty directory
+        # rather than a file, which .exists() can't tell apart.
         return []
     events: List[Dict[str, Any]] = []
     for raw_line in AUTH_LOG.read_text(encoding="utf-8", errors="replace").splitlines():

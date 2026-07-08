@@ -1,5 +1,6 @@
 networks:
   ot-net:
+    name: ot-net
   l2_l3_integration:
     external: true
 
@@ -24,10 +25,18 @@ services:
     restart: unless-stopped
     mem_limit: 256m
 
+  # Cross-level (L2 <-> L3.5) bridge - opt-in only. It hard-depends on the
+  # externally-created l2_l3_integration network, so it must stay out of the
+  # default/monitoring bring-up: `docker compose up` and
+  # `--profile monitoring up` would otherwise fail outright for anyone who
+  # hasn't separately set up that integration network, even though the
+  # bridge's own app code already degrades gracefully (passive/no-op) when
+  # SCADA_L2_URL is unset. Start explicitly with `--profile integration`.
   opcua-pera-bridge:
     build:
       context: ../services/opcua
       dockerfile: Dockerfile.bridge
+    profiles: [integration]
     environment:
       SCADA_L2_URL: ${SCADA_L2_URL:-}
       OPCUA_URL: opc.tcp://opcua:4840
@@ -172,22 +181,14 @@ services:
     profiles: [monitoring]
     network_mode: host
     cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ZEEK_IFACE: ${ZEEK_IFACE:-}
     volumes:
       - ../monitoring/zeek:/opt/zeek/share/zeek/site:ro
+      - ../monitoring/zeek/entrypoint.sh:/usr/local/bin/zeek-entrypoint.sh:ro
       - ../services/historian/logs:/var/log/honeypot:ro
       - /var/log/zeek:/opt/zeek/spool/zeek
     entrypoint: []
-    command: >-
-      sh -c '
-        iface=$$(ip -o -4 addr show |
-          awk "$$4 !~ /^10[.]0[.]2[.]/ && $$2 != \"lo\" && $$2 !~ /^(docker|br-|veth)/ { sub(/\/.*/, \"\", $$4); print $$2; exit }");
-        iface=$${iface:-eth0};
-        mkdir -p /opt/zeek/spool/zeek;
-        cd /opt/zeek/spool/zeek;
-        exec zeek -C -i "$$iface"
-          /opt/zeek/share/zeek/site/discovery_scan_detect.zeek
-          /opt/zeek/share/zeek/site/opcua_write_detect.zeek
-          /opt/zeek/share/zeek/site/arp_mitm_detect.zeek
-      '
+    command: ["sh", "/usr/local/bin/zeek-entrypoint.sh"]
     restart: unless-stopped
     mem_limit: 256m

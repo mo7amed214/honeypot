@@ -37,6 +37,8 @@ Thumbs.db
 artifacts/
 ml/runs/
 ml/checkpoints/
+monitoring/ml/integration_live_latest.json
+monitoring/wazuh/live-alerts/*.json
 
 # Demo / local-only folders
 .venv-demo/

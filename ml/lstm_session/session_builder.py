@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import random
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
@@ -74,13 +75,25 @@ INTENT_CANONICAL = {
     "ot_impact": "ot_impact",
 }
 
-DETECTION_IP_TO_ASSET = {
+DEFAULT_DETECTION_IP_TO_ASSET = {
     "192.168.1.5": "ews",
     "192.168.1.7": "smb",
     "192.168.1.9": "monitoring_laptop",
     "192.168.1.10": "historian",
     "192.168.1.11": "opcua",
 }
+
+
+def _load_ip_to_asset() -> Dict[str, str]:
+    """Merge in a LEVEL3_IP_TO_ASSET JSON override for non-default lab subnets
+    (e.g. the laptop1-safe 192.168.56.x or integration 172.30.70.x profiles)."""
+    override = os.environ.get("LEVEL3_IP_TO_ASSET")
+    if not override:
+        return dict(DEFAULT_DETECTION_IP_TO_ASSET)
+    return {**DEFAULT_DETECTION_IP_TO_ASSET, **json.loads(override)}
+
+
+DETECTION_IP_TO_ASSET = _load_ip_to_asset()
 
 
 def iter_ground_truth_files(scenario_root: Path) -> Iterable[Path]:

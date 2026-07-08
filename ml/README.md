@@ -25,6 +25,18 @@ Important note:
   - a small deterministic path refinement cleans up obvious SOC-facing edge
     cases like `opcua_write -> ot_impact`
 
+Asset IP mapping (portability across lab profiles):
+
+- `session_builder.py` and `session_detection.py` classify events by asset
+  using a default 192.168.1.x mapping (the original lab subnet).
+- To run against a different bring-up profile (e.g. `laptop1-safe` on
+  192.168.56.x, or `integration` on 172.30.70.x), override without editing
+  code:
+  - `LEVEL3_IP_TO_ASSET='{"192.168.56.5": "ews", ...}'` (used by `session_builder.py`)
+  - `LEVEL3_ASSET_IPS='{"ews": ["192.168.56.5"], ...}'` (used by `session_detection.py`)
+  - Both are JSON, merged on top of the defaults, so you only need to specify
+    the entries that differ.
+
 Quick start:
 
 ```bash

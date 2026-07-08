@@ -403,6 +403,37 @@ implementation artefact.
 
 ---
 
+## Journal Manuscript (In Progress)
+
+**Working title:** *A Modular Purdue Level 3 Industrial Honeynet Validated by
+Autonomous LLM Red-Teaming*
+
+The journal version reframes the thesis around its two most distinctive
+contributions together, rather than treating either as secondary to the other:
+
+1. **The modular Level 3 honeynet architecture** — four deception assets,
+   three independent telemetry layers, and a reproducible bring-up profile
+   system (`laptop1-safe`, `laptop1-bridge`, `integration`) that lets the same
+   design run on a fresh laptop or compose across Purdue levels.
+2. **Autonomous LLM red-teaming as a validation methodology** — an unscripted
+   LLM agent (`claude-opus-4-5`), given nothing but one SSH credential,
+   independently traversed the entire kill chain. The thesis's own discussion
+   (§6.5) already identifies this as *"itself a methodological contribution"*:
+   a reproducible, documentable way to adversarially validate ICS deception
+   systems without a human red team, producing a structured
+   Full/Partial/Gap detection-coverage taxonomy rather than a simple pass/fail.
+
+The `SessionAttentionLSTM` session classifier remains in the paper as a third,
+supporting result (analyst-facing triage on top of the same telemetry), not
+as a headline claim.
+
+**Open item before submission:** the LLM adversarial run in the thesis is a
+single unscripted session (n=1). Strengthening this into a journal-grade
+claim means running a small number of repeat trials — and ideally testing a
+second LLM — to show the finding isn't a one-off or model-specific artefact.
+
+---
+
 ## License
 
 MIT

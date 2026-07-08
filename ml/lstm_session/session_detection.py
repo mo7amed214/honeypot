@@ -28,7 +28,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 LOKI_QUERY_URL = os.environ.get("LIVE_LOKI_QUERY_URL", "http://host.docker.internal:3100")
 
-ASSET_IPS: Dict[str, set[str]] = {
+DEFAULT_ASSET_IPS: Dict[str, set[str]] = {
     "monitoring_laptop": {"192.168.1.9"},
     "workstation": {"192.168.1.9"},
     "ews": {"192.168.1.5"},
@@ -39,6 +39,20 @@ ASSET_IPS: Dict[str, set[str]] = {
     "smb": {"192.168.1.7"},
     "level3_subnet": {"192.168.1.5", "192.168.1.7", "192.168.1.10", "192.168.1.11"},
 }
+
+
+def _load_asset_ips() -> Dict[str, set[str]]:
+    """Merge in a LEVEL3_ASSET_IPS JSON override (asset -> list of IPs) for
+    non-default lab subnets (e.g. laptop1-safe, laptop1-bridge, integration)."""
+    merged = {asset: set(ips) for asset, ips in DEFAULT_ASSET_IPS.items()}
+    override = os.environ.get("LEVEL3_ASSET_IPS")
+    if override:
+        for asset, ips in json.loads(override).items():
+            merged[asset] = set(ips)
+    return merged
+
+
+ASSET_IPS: Dict[str, set[str]] = _load_asset_ips()
 
 RULE_TO_EVIDENCE = {
     "100301": "historian_web",
