@@ -1,0 +1,38 @@
+{
+  "sessions": 257,
+  "events": 1261,
+  "attack_sessions": 190,
+  "benign_sessions": 67,
+  "unique_intents": 13,
+  "intent_distribution": {
+    "credential_reuse": 2,
+    "discovery_scan": 26,
+    "credential_access": 24,
+    "multi_stage_collection": 2,
+    "ot_impact": 52,
+    "collection": 32,
+    "host_recon": 26,
+    "ot_recon": 26,
+    "process_monitoring": 2,
+    "maintenance_check": 2,
+    "ot_healthcheck": 1,
+    "operator_review": 2,
+    "benign_operations": 60
+  },
+  "mitre_techniques": {
+    "T0811": 305,
+    "T0866": 253,
+    "T0846": 182,
+    "T0812": 4,
+    "T0802": 104,
+    "T0861": 78,
+    "T0842": 3,
+    "T0831": 104,
+    "T0830": 34,
+    "T0000": 17,
+    "none": 177
+  },
+  "mitre_technique_count": 11,
+  "subset_sessions": 134,
+  "subset_events": 537
+}

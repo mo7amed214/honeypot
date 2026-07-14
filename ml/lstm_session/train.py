@@ -190,8 +190,12 @@ class SessionAttentionLSTM(nn.Module):
         hidden_size: int = 64,
         num_layers: int = 2,
         bidirectional: bool = True,
+        attention: bool = True,
     ) -> None:
         super().__init__()
+        # When attention is disabled (ablation), the sequence is pooled by a
+        # masked mean over valid timesteps instead of attention weighting.
+        self.use_attention = attention
         self.asset_class_emb  = nn.Embedding(len(vocabs["asset_class"]),  6, padding_idx=0)
         self.source_asset_emb = nn.Embedding(len(vocabs["source_asset"]), 4, padding_idx=0)
         self.target_asset_emb = nn.Embedding(len(vocabs["target_asset"]), 4, padding_idx=0)
@@ -250,7 +254,12 @@ class SessionAttentionLSTM(nn.Module):
             >= batch["lengths"].to(outputs.device).unsqueeze(1)
         )
 
-        context       = self.attention(outputs, padding_mask)
+        if self.use_attention:
+            context = self.attention(outputs, padding_mask)
+        else:
+            # Masked mean pooling over valid (non-padded) timesteps.
+            valid = (~padding_mask).unsqueeze(-1).float()             # (B, T, 1)
+            context = (outputs * valid).sum(dim=1) / valid.sum(dim=1).clamp(min=1.0)
         context       = self.dropout(context)
         danger_logits = self.danger_head(context)
         stage_logits  = self.stage_head(context)
@@ -498,6 +507,7 @@ def run_kfold(
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
             bidirectional=args.bidirectional,
+            attention=args.attention,
         )
         fold_opt  = torch.optim.Adam(fold_model.parameters(), lr=args.learning_rate)
         fold_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -720,6 +730,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--label-smoothing",    type=float, default=0.05)
     parser.add_argument("--bidirectional",   action="store_true", default=True)
     parser.add_argument("--no-bidirectional", dest="bidirectional", action="store_false")
+    parser.add_argument("--attention",     action="store_true", default=True)
+    parser.add_argument("--no-attention",  dest="attention", action="store_false",
+                        help="Ablation: replace attention pooling with masked mean pooling.")
+    parser.add_argument("--seed",          type=int, default=SEED,
+                        help="Random seed (reproducibility / robustness across seeds).")
     parser.add_argument("--kfold",           type=int,   default=5,
                         help="Number of CV folds (0 = skip).")
     parser.add_argument("--no-prefix-expansion", action="store_true")
@@ -733,6 +748,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    # Re-seed from the CLI so ablation/robustness runs are reproducible per seed.
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
     scenario_root = Path(args.scenario_root)
     detection_root = Path(args.detection_root)
     output_dir = Path(args.output_dir)
@@ -770,7 +788,7 @@ def main() -> None:
     )
 
     # ── Build model ─────────────────────────────────────────────────────────
-    model     = SessionAttentionLSTM(vocabs=vocabs, hidden_size=args.hidden_size, num_layers=args.num_layers, bidirectional=args.bidirectional)
+    model     = SessionAttentionLSTM(vocabs=vocabs, hidden_size=args.hidden_size, num_layers=args.num_layers, bidirectional=args.bidirectional, attention=args.attention)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", patience=8, factor=0.5, min_lr=5e-6
@@ -921,10 +939,10 @@ def main() -> None:
         input_feature_mode="observable_evidence_only",
         input_event_fields=input_event_fields,
         excluded_semantic_fields=excluded_semantic_fields,
-        model_class="SessionAttentionLSTM",
+        model_class="SessionAttentionLSTM" if args.attention else "SessionMeanPoolLSTM",
         hidden_size=args.hidden_size,
         num_layers=args.num_layers,
-        attention=True,
+        attention=args.attention,
         bidirectional=args.bidirectional,
         train_examples=len(train_examples),
         val_examples=len(val_examples),
@@ -967,8 +985,9 @@ def main() -> None:
         "config": {
             "hidden_size": args.hidden_size,
             "num_layers":  args.num_layers,
-            "attention":      True,
+            "attention":      args.attention,
             "bidirectional":  args.bidirectional,
+            "seed":           args.seed,
             "label_smoothing": args.label_smoothing,
             "input_feature_mode": "observable_evidence_only",
             "input_event_fields": input_event_fields,

@@ -1,0 +1,109 @@
+# Lean, self-contained honeynet for a genuinely-live red-team trial.
+#
+# Brings up only what an attacker touches - OPC UA server, historian, SMB share,
+# and a Linux SSH foothold (the "engineering workstation") - on an isolated
+# 10.13.37.0/24 network (deliberately NOT 192.168.x so it can't clash with the
+# host's real WiFi/LAN, e.g. when Ollama runs on a second laptop). No Grafana /
+# Loki / Wazuh / Zeek, to keep RAM free for the model.
+#
+# The agent is given only SSH to the foothold (published to the host on :2222);
+# from there it reaches the other assets by their static 10.13.37.x addresses.
+#
+#   bash scripts/run_redteam_live.sh        # build + up
+#
+networks:
+  redteam-live:
+    name: redteam-live
+    ipam:
+      config:
+        - subnet: 10.13.37.0/24
+          gateway: 10.13.37.1
+
+volumes:
+  rt_historian_data:
+
+services:
+  foothold:
+    build: ../redteam/foothold
+    ports:
+      - "2222:22"          # agent SSHes into localhost:2222
+    networks:
+      redteam-live:
+        ipv4_address: 10.13.37.5
+    restart: unless-stopped
+    mem_limit: 256m
+
+  opcua:
+    build: ../services/opcua
+    environment:
+      SCADA_L2_URL: ""
+    networks:
+      redteam-live:
+        ipv4_address: 10.13.37.11
+    restart: unless-stopped
+    mem_limit: 256m
+
+  historian-web:
+    build:
+      context: ../services/historian
+      dockerfile: Dockerfile
+    command: ["/app/docker-entrypoint.sh"]
+    environment:
+      SERVICE_NAME: historian_web
+      DB_PATH: /data/historian.db
+      EVENT_LOG_PATH: /var/log/historian/events.jsonl
+      HISTORIAN_USERNAME: john
+      HISTORIAN_PASSWORD: Cisco
+      SERVER_BASE: http://10.13.37.10:5000
+    volumes:
+      - rt_historian_data:/data
+      - ../services/historian/logs:/var/log/historian
+    networks:
+      redteam-live:
+        ipv4_address: 10.13.37.10
+    restart: unless-stopped
+    mem_limit: 256m
+
+  historian-ingest:
+    build:
+      context: ../services/historian
+      dockerfile: Dockerfile
+    command: ["python", "opcua_ingest.py"]
+    environment:
+      DB_PATH: /data/historian.db
+      OPCUA_URL: opc.tcp://10.13.37.11:4840
+    volumes:
+      - rt_historian_data:/data
+    networks: [redteam-live]
+    depends_on: [opcua, historian-web]
+    restart: unless-stopped
+    mem_limit: 128m
+
+  smb:
+    build: ../services/smb
+    networks:
+      redteam-live:
+        ipv4_address: 10.13.37.7
+    volumes:
+      - ../services/smb/config/smb.conf:/etc/samba/smb.conf:ro
+    restart: unless-stopped
+    mem_limit: 128m
+
+  # Lightweight network sensor for detection-coverage measurement. Watches the
+  # redteam-live bridge (set ZEEK_IFACE to br-<network-id>) and runs the same
+  # custom detection scripts as the full lab. Opt-in via `--profile detection`
+  # so the base live honeynet stays minimal.
+  zeek:
+    image: zeek/zeek:latest
+    profiles: [detection]
+    network_mode: host
+    cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ZEEK_IFACE: ${ZEEK_IFACE:-}
+    volumes:
+      - ../monitoring/zeek:/opt/zeek/share/zeek/site:ro
+      - ../monitoring/zeek/entrypoint.sh:/usr/local/bin/zeek-entrypoint.sh:ro
+    entrypoint: []
+    command: ["sh", "/usr/local/bin/zeek-entrypoint.sh"]
+    restart: unless-stopped
+    mem_limit: 256m
