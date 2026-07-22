@@ -269,10 +269,19 @@ Vagrant.configure("2") do |config|
         node.vm.synced_folder ".", "/opt/honeypot",
           owner: "root", group: "root",
           mount_options: ["dmode=750", "fmode=640"]
-        if name == "ews" && File.directory?(File.expand_path("../PERA-integration-ready-", __dir__))
-          node.vm.synced_folder "../PERA-integration-ready-", "/opt/pera",
-            owner: "root", group: "root",
-            mount_options: ["dmode=750", "fmode=640"]
+        if name == "ews"
+          # Mount the Level 0-2 (PERA) checkout if present as a sibling repo so
+          # the EWS provisioner can bring up the Level 2 stack for the L2<->L3
+          # bridge. Prefer the current repo name (Purdue_Levels_0-2); fall back
+          # to the older PERA-integration-ready- for existing checkouts.
+          pera_dir = ["../Purdue_Levels_0-2", "../PERA-integration-ready-"]
+            .map { |p| File.expand_path(p, __dir__) }
+            .find { |p| File.directory?(p) }
+          if pera_dir
+            node.vm.synced_folder pera_dir, "/opt/pera",
+              owner: "root", group: "root",
+              mount_options: ["dmode=750", "fmode=640"]
+          end
         end
       end
 
@@ -329,7 +338,7 @@ Vagrant.configure("2") do |config|
         node.vm.provision "shell",
           env: {
             "P35_LOKI_PUSH_URL" => ENV.fetch("P35_LOKI_PUSH_URL", "http://192.168.56.11:3100/loki/api/v1/push"),
-            "P35_ALLOY_HTTP_ADDR" => ENV.fetch("P35_EWS_ALLOY_HTTP_ADDR", "192.168.56.5"),
+            "P35_ALLOY_HTTP_ADDR" => ENV.fetch("P35_EWS_ALLOY_HTTP_ADDR", "127.0.0.1"),
             "P35_ALLOY_HTTP_PORT" => ENV.fetch("P35_EWS_ALLOY_HTTP_PORT", "12345"),
           },
           path: "vagrant/provision/ews_alloy.sh"

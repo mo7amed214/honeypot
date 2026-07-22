@@ -3,7 +3,12 @@
 set -euo pipefail
 
 LOKI_PUSH_URL="${P35_LOKI_PUSH_URL:-http://192.168.56.11:3100/loki/api/v1/push}"
-ALLOY_HTTP_ADDR="${P35_ALLOY_HTTP_ADDR:-192.168.56.5}"
+# Alloy's own status/UI listener only needs to be reachable locally - it is not
+# part of the log-shipping path (that's the outbound loki.write push above).
+# Default to loopback so this works regardless of which Vagrant profile/network
+# layout the EWS is running under; a profile-specific hostonly IP may not exist
+# (e.g. the "ews-only" profile's 192.168.56.5 is not configured in every mode).
+ALLOY_HTTP_ADDR="${P35_ALLOY_HTTP_ADDR:-127.0.0.1}"
 ALLOY_HTTP_PORT="${P35_ALLOY_HTTP_PORT:-12345}"
 SMOKE_LOG="/var/log/p35-ew/alloy-smoke.log"
 
@@ -172,6 +177,12 @@ loki.source.file "ews_smoke" {
 EOF
 
 usermod -aG adm alloy || true
+# /opt/honeypot and /opt/pera are mounted root:root, dmode=750/fmode=640 so the
+# EWS operator (john) can't browse them (deception requirement - do not loosen
+# the mount). Alloy runs as an unprivileged system user and needs read access
+# to ship wazuh/ml/historian/pera telemetry from under those paths; grant it
+# via root-group membership instead, which john is not a member of.
+usermod -aG root alloy || true
 cat > /etc/default/alloy <<EOF
 CONFIG_FILE="/etc/alloy/config.alloy"
 CUSTOM_ARGS="--server.http.listen-addr=${ALLOY_HTTP_ADDR}:${ALLOY_HTTP_PORT}"
