@@ -149,8 +149,70 @@ local.file_match "ews_pera" {
 
 loki.source.file "ews_pera" {
   targets       = local.file_match.ews_pera.targets
-  forward_to    = [loki.write.bastion.receiver]
+  forward_to    = [loki.process.ews_pera.receiver]
   tail_from_end = false
+}
+
+// scada_honeypot_audit.json's writer (scada_mtu.py log_threat_event()) already
+// emits a flat JSON object with mitre_technique/attacker_ip/severity/etc as
+// top-level keys - no need to parse free text. scada_mtu.log's human-readable
+// lines aren't JSON; stage.json fails silently on them (no labels attached),
+// they still ship as plain log lines same as before.
+//
+// Per docs/telemetry-schema.md's own cardinality policy: only promote
+// low-cardinality fields (mitre_technique/severity/provenance/event_type) to
+// indexed labels. attacker_ip/session_id/parameter/value stay in the JSON
+// body only - still queryable via a json pipe at query time, just not
+// indexed as labels.
+loki.process "ews_pera" {
+  forward_to = [loki.write.bastion.receiver]
+
+  stage.json {
+    expressions = {
+      mitre_technique = "mitre_technique",
+      severity        = "severity",
+      provenance      = "provenance",
+      event_type      = "event_type",
+    }
+  }
+
+  stage.labels {
+    values = {
+      mitre_technique = "",
+      severity        = "",
+      provenance      = "",
+      event_type      = "",
+    }
+  }
+}
+
+// Samba's full_audit VFS module logs bait-file opens/reads via syslog
+// (smb.conf: full_audit:facility = local7) into this file (see
+// services/smb/config/rsyslog-full-audit.conf + entrypoint.sh - the
+// container never ran a syslog daemon before, so these were silently
+// dropped no matter what an attacker did). job name matches exactly what
+// monitoring/grafana/soc_honeypot_detection_dashboard_ml.json's
+// "SMB Access - Bait File Reads" panel already expects.
+local.file_match "ews_smb" {
+  path_targets = [
+    {
+      __path__  = "/opt/honeypot/services/smb/logs/full_audit.log",
+      job       = "smb_access",
+      host      = "ews",
+      role      = "level3_ews",
+      component = "smb",
+      source    = "honeypot",
+      repo      = "honeypot",
+      category  = "file_access",
+    },
+  ]
+  sync_period = "10s"
+}
+
+loki.source.file "ews_smb" {
+  targets       = local.file_match.ews_smb.targets
+  forward_to    = [loki.write.bastion.receiver]
+  tail_from_end = true
 }
 
 local.file_match "ews_smoke" {

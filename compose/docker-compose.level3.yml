@@ -18,7 +18,6 @@ volumes:
   grafana_data:
   loki_data:
   promtail_positions:
-  smb_logs:
 
 services:
 
@@ -62,7 +61,11 @@ services:
     mem_limit: 128m
     volumes:
       - ../services/smb/config/smb.conf:/etc/samba/smb.conf:ro
-      - smb_logs:/var/log/samba
+      # Bind mount, not a named volume: /var/lib/docker/volumes/ is root-only
+      # (correctly - arbitrary host processes shouldn't browse container
+      # storage), which silently blocked alloy (a normal host process) from
+      # ever reading full_audit.log. Same pattern as historian/wazuh/ml below.
+      - ../services/smb/logs:/var/log/samba
 
   # ── Historian ────────────────────────────────────────────────────────────────
 
