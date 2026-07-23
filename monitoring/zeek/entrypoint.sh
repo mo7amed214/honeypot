@@ -30,6 +30,7 @@ cd /opt/zeek/spool/zeek
 echo "[zeek] capturing on interface: $iface"
 
 exec zeek -C -i "$iface" \
+  /opt/zeek/share/zeek/site/local_nets.zeek \
   /opt/zeek/share/zeek/site/discovery_scan_detect.zeek \
   /opt/zeek/share/zeek/site/opcua_write_detect.zeek \
   /opt/zeek/share/zeek/site/arp_mitm_detect.zeek
