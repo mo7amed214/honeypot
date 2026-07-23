@@ -1,6 +1,15 @@
 networks:
   ot-net:
     name: ot-net
+    # Pinned subnet so zeek's entrypoint can reliably identify ot-net's own
+    # bridge interface at container start (Docker's auto-assigned br-<hash>
+    # name is unpredictable across recreations, and with several other
+    # Docker networks present on this host - L2's PERA networks, the
+    # l2_l3_integration bridge - "just grab the first br-* interface" can
+    # (and did) pick the wrong one, leaving zeek blind to ot-net traffic).
+    ipam:
+      config:
+        - subnet: 172.29.88.0/24
   l2_l3_integration:
     external: true
 
@@ -119,6 +128,12 @@ services:
   loki:
     image: grafana/loki:2.9.8
     profiles: [monitoring]
+    # The default image user (uid 10001) can't read loki-config.yaml once
+    # /opt/honeypot is mounted root:root, fmode=640 (the EWS operator/john
+    # deception hardening) - run as root INSIDE this one isolated container
+    # (not the host) so it can read its own config; the mount itself stays
+    # locked down for john.
+    user: "0:0"
     command: -config.file=/etc/loki/local-config.yaml
     ports:
       - "${LOKI_PORT:-3100}:3100"

@@ -126,6 +126,29 @@ SCADA_L2_URL="$SCADA_L2_URL" docker compose \
   "${L3_PROFILES[@]}" \
   up -d --build
 
+# Zeek's own minimal image has no `ip`/iproute2, so its entrypoint falls back
+# to "grab the first br-* interface in /proc/net/dev" to find ot-net's bridge
+# - with L2's PERA networks and l2_l3_integration also present on this host,
+# that heuristic can (and did, in testing) pick the WRONG bridge, leaving zeek
+# blind to all ot-net traffic (the honeypot's own OPC-UA/historian/smb
+# services) while it silently captured on an unrelated network instead. Fix
+# it here, on the host, where `ip`/docker ARE available: ot-net's subnet is
+# pinned (see docker-compose.level3.yml), so resolve its real bridge by IP and
+# recreate just the zeek container pinned to it.
+if [[ "${L3_PROFILES[*]}" == *"--profile monitoring"* ]]; then
+  ZEEK_IFACE="$(ip -o -4 addr show 2>/dev/null | awk '$4 ~ /^172\.29\.88\./ {print $2; exit}')"
+  if [[ -n "$ZEEK_IFACE" ]]; then
+    CURRENT_ZEEK_IFACE="$(docker exec compose-zeek-1 sh -c 'echo "$ZEEK_IFACE"' 2>/dev/null || true)"
+    if [[ "$CURRENT_ZEEK_IFACE" != "$ZEEK_IFACE" ]]; then
+      echo "[ews] pinning zeek to ot-net's real bridge: $ZEEK_IFACE"
+      ZEEK_IFACE="$ZEEK_IFACE" SCADA_L2_URL="$SCADA_L2_URL" docker compose \
+        -f /opt/honeypot/compose/docker-compose.level3.yml \
+        "${L3_PROFILES[@]}" \
+        up -d --build --force-recreate zeek
+    fi
+  fi
+fi
+
 # Lock down infrastructure directories from the EWS operator account.
 # john is a plant engineer — compose files, PERA source, and ML code
 # are root-owned infrastructure, not operator tools.
