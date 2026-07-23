@@ -38,7 +38,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Current SOC posture over the last 60 minutes: Normal, Investigating, or Active incident.",
       "fieldConfig": {
@@ -120,7 +120,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "((((sum(count_over_time({job=\"wazuh\",source=\"wazuh\",rule_id=~\"100304|100305|100209\"}[60m])) or vector(0)) > bool 0) * 2) + (((sum(count_over_time({job=\"wazuh\",source=\"wazuh\",rule_id=~\"100301|100302|100303\"}[60m])) or vector(0)) > bool 0)))",
@@ -136,7 +136,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Most severe core detection observed in the last 24 hours.",
       "fieldConfig": {
@@ -202,7 +202,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "topk(1, max by (rule_id, rule_description, rule_level) (count_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json rule_id=\"rule_id\", rule_description=\"rule_description\", rule_level=\"rule_level\" | rule_id!=\"\" [$__range])))",
@@ -218,7 +218,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "How many asset classes registered at least one core detection in the last 24 hours.",
       "fieldConfig": {
@@ -291,7 +291,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "count(sum by (asset_class) (count_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json asset_class=\"asset_class\" | asset_class!=\"\" [$__range])))",
@@ -307,7 +307,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Most frequent high-risk core rule in the last 24 hours.",
       "fieldConfig": {
@@ -373,7 +373,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "topk(1, max by (rule_id, rule_description, rule_level) (count_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json rule_id=\"rule_id\", rule_description=\"rule_description\", rule_level=\"rule_level\" | rule_id!=\"\" | rule_level=~\"([7-9]|[1-9][0-9]+)\" [$__range])))",
@@ -402,7 +402,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Historian activity visible across the current telemetry set, including east-west VM traffic seen by the remote Zeek sensor plus host/application confirmation.",
       "fieldConfig": {
@@ -474,7 +474,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_historian_web_count [$__range])) or vector(0)",
@@ -489,7 +489,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Repository or file-share access mapped to T0811.",
       "fieldConfig": {
@@ -561,7 +561,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_smb_access_count [$__range])) or vector(0)",
@@ -576,7 +576,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "OT path interaction mapped to T0886.",
       "fieldConfig": {
@@ -648,7 +648,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_opcua_path_count [$__range])) or vector(0)",
@@ -663,7 +663,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Write-like OPC UA activity mapped to T0830.",
       "fieldConfig": {
@@ -735,7 +735,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_write_like_count [$__range])) or vector(0)",
@@ -750,7 +750,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Critical write-like signal mapped to T0830.",
       "fieldConfig": {
@@ -822,7 +822,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_critical_write_count [$__range])) or vector(0)",
@@ -837,7 +837,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Integrity or process impact signal.",
       "fieldConfig": {
@@ -909,7 +909,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_process_anomaly_count [$__range])) or vector(0)",
@@ -937,7 +937,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Live EWS login and command execution evidence for analyst triage.",
       "gridPos": {
@@ -962,7 +962,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "{job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json evidence_key=\"evidence_key\", rule_id=\"rule_id\", matched_step=\"matched_step\", attack_stage=\"attack_stage\", asset_class=\"asset_class\", rule_description=\"rule_description\" | evidence_key=~\"host_access|host_command|host_scriptblock|staged_tool\" | line_format \"step={{.matched_step}} | rule={{.rule_id}} | stage={{.attack_stage}} | evidence={{.evidence_key}} | asset={{.asset_class}} | detail={{.rule_description}}\"",
@@ -976,7 +976,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Historian and endpoint evidence correlated with network telemetry from the remote Zeek sensor.",
       "gridPos": {
@@ -1001,7 +1001,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "{job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json evidence_key=\"evidence_key\", rule_id=\"rule_id\", matched_step=\"matched_step\", attack_stage=\"attack_stage\", asset_class=\"asset_class\", rule_description=\"rule_description\" | evidence_key=~\"historian_web|write_like|critical_write|process_anomaly|staged_tool\" | line_format \"step={{.matched_step}} | rule={{.rule_id}} | stage={{.attack_stage}} | evidence={{.evidence_key}} | asset={{.asset_class}} | detail={{.rule_description}}\"",
@@ -1015,7 +1015,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Core Zeek and OT-path detections for what the monitoring interface can actually see. Missing east-west VM traffic here does not invalidate host/application-confirmed activity.",
       "gridPos": {
@@ -1040,7 +1040,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "{job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json evidence_key=\"evidence_key\", rule_id=\"rule_id\", matched_step=\"matched_step\", attack_stage=\"attack_stage\", asset_class=\"asset_class\", rule_description=\"rule_description\" | evidence_key=~\"historian_web|smb_access|opcua_path|write_like|critical_write|discovery\" | line_format \"step={{.matched_step}} | rule={{.rule_id}} | stage={{.attack_stage}} | evidence={{.evidence_key}} | asset={{.asset_class}} | detail={{.rule_description}}\"",
@@ -1067,7 +1067,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Volume of process anomaly detections to gauge host-side instability.",
       "fieldConfig": {
@@ -1139,7 +1139,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_process_anomaly_count [$__range])) or vector(0)",
@@ -1154,7 +1154,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Volume of write-like activity seen across the OT path.",
       "fieldConfig": {
@@ -1226,7 +1226,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "max(max_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_summary\",session_id=~\"$session_id\"} | json | unwrap observed_write_like_count [$__range])) or vector(0)",
@@ -1241,7 +1241,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Most recent higher-risk OT or process-impact events relevant to escalation.",
       "gridPos": {
@@ -1266,7 +1266,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "{job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json evidence_key=\"evidence_key\", rule_id=\"rule_id\", matched_step=\"matched_step\", attack_stage=\"attack_stage\", rule_description=\"rule_description\", data_uid=\"data_uid\", data_tag=\"data_tag\", data_service=\"data_service\", data_confidence=\"data_confidence\" | evidence_key=~\"process_anomaly|write_like|critical_write|staged_tool\" | line_format \"rule={{.rule_id}} step={{.matched_step}} stage={{.attack_stage}} uid={{ if .data_uid }}{{ .data_uid }}{{ else }}-{{ end }} target={{ if .data_tag }}{{ .data_tag }}{{ else if .data_service }}{{ .data_service }}{{ else }}-{{ end }} confidence={{ if .data_confidence }}{{ .data_confidence }}{{ else }}-{{ end }} note={{ .rule_description }}\"",
@@ -1293,7 +1293,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Breakdown by attack stage across the current dashboard window.",
       "fieldConfig": {
@@ -1328,7 +1328,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "sum by (attack_stage) (count_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json attack_stage=\"attack_stage\" | attack_stage!=\"\" [$__range]))",
@@ -1344,7 +1344,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Breakdown by asset class across the current dashboard window.",
       "fieldConfig": {
@@ -1379,7 +1379,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "sum by (asset_class) (count_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json asset_class=\"asset_class\" | asset_class!=\"\" [$__range]))",
@@ -1395,7 +1395,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Top triggered rule descriptions across the current dashboard window.",
       "fieldConfig": {
@@ -1430,7 +1430,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "topk(10, sum by (rule_description) (count_over_time({job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json rule_description=\"rule_description\" | rule_description!=\"\" [$__range])))",
@@ -1459,7 +1459,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "High-priority feed for the incident story, kept full width for rapid triage.",
       "gridPos": {
@@ -1484,7 +1484,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "{job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json rule_level=\"rule_level\", rule_id=\"rule_id\", matched_step=\"matched_step\", attack_stage=\"attack_stage\", asset_class=\"asset_class\", rule_description=\"rule_description\", data_uid=\"data_uid\" | rule_level=~\"([7-9]|[1-9][0-9]+)\" | line_format \"rule={{.rule_id}} step={{.matched_step}} stage={{.attack_stage}} asset={{.asset_class}} uid={{ if .data_uid }}{{ .data_uid }}{{ else }}-{{ end }} note={{ .rule_description }}\"",
@@ -1498,7 +1498,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "description": "Short-form correlation view for the current session scope, blending remote-sensor network evidence with host and application truth.",
       "gridPos": {
@@ -1523,7 +1523,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "{job=\"ml\",source=\"ml\",kind=\"session_detection_event\",session_id=~\"$session_id\"} | json rule_level=\"rule_level\", rule_id=\"rule_id\", matched_step=\"matched_step\", attack_stage=\"attack_stage\", asset_class=\"asset_class\", data_uid=\"data_uid\", data_confidence=\"data_confidence\" | rule_level=~\"([7-9]|[1-9][0-9]+)\" | line_format \"rule={{.rule_id}} step={{.matched_step}} stage={{.attack_stage}} asset={{.asset_class}} uid={{ if .data_uid }}{{ .data_uid }}{{ else }}-{{ end }} confidence={{ if .data_confidence }}{{ .data_confidence }}{{ else }}-{{ end }}\"",
@@ -1576,14 +1576,14 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "sum(count_over_time({job=\"ml\",source=\"ml\",kind=\"correlated_session_summary\",session_id=~\"$session_id\"}[$__range]))",
@@ -1656,14 +1656,14 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "sum(count_over_time({job=\"ml\",source=\"ml\",kind=\"correlated_session_summary\",session_id=~\"$session_id\",predicted_danger_label=\"critical\"}[$__range]))",
@@ -1736,14 +1736,14 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "max_over_time({job=\"ml\",source=\"ml\",kind=\"correlated_session_summary\",session_id=~\"$session_id\"} | json | unwrap predicted_danger_score [$__range])",
@@ -1816,14 +1816,14 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "count(sum by (predicted_session_intent_hybrid) (count_over_time({job=\"ml\",source=\"ml\",kind=\"correlated_session_summary\",session_id=~\"$session_id\"}[$__range])))",
@@ -1896,14 +1896,14 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "{job=\"ml\",source=\"ml\",kind=\"correlated_session_summary\",session_id=~\"$session_id\"} | json | line_format \"priority={{.predicted_priority}} risk={{.predicted_danger_label}} intent={{.predicted_session_intent_hybrid}} session={{.session_id}} assets={{.asset_path}} path={{.stage_path}} note={{.summary_text}}\"",
@@ -1935,14 +1935,14 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "{job=\"ml\",source=\"ml\",kind=\"session_progression\",session_id=~\"$session_id\"} | json | line_format \"session={{.session_id}} step={{.event_count}}/{{.total_event_count}} risk={{.predicted_danger_label}} score={{.predicted_danger_score}} intent={{.predicted_session_intent_hybrid}} stage={{.predicted_dominant_stage}} path={{.stage_path}}\"",
@@ -1974,14 +1974,14 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "editorMode": "code",
           "expr": "{job=\"ml\",source=\"ml\",kind=\"correlated_session_summary\",session_id=~\"$session_id\"} | json | predicted_priority=~\"P1|P2\" | line_format \"priority={{.predicted_priority}} risk={{.predicted_danger_label}} intent={{.predicted_session_intent_hybrid}} session={{.session_id}} note={{.summary_text}}\"",
@@ -2025,7 +2025,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -2049,9 +2049,9 @@
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "loki"
           },
-          "expr": "sum by (severity) (count_over_time({job=\"scada_l2_audit\"}[30s]))",
+          "expr": "sum by (severity) (count_over_time({job=\"ews_pera_audit\"}[30s]))",
           "legendFormat": "{{severity}}"
         }
       ]
@@ -2068,7 +2068,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "loki"
       },
       "options": {
         "dedupStrategy": "none",
@@ -2084,9 +2084,9 @@
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "loki"
           },
-          "expr": "{job=\"scada_l2_audit\"} | json | __error__=\"\""
+          "expr": "{job=\"ews_pera_audit\"} | json | __error__=\"\""
         }
       ]
     },
@@ -2102,7 +2102,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "options": {
         "dedupStrategy": "none",
@@ -2118,7 +2118,7 @@
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "expr": "{job=\"smb_access\"}"
         }
@@ -2136,7 +2136,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "level3-loki"
       },
       "options": {
         "dedupStrategy": "none",
@@ -2152,7 +2152,7 @@
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "level3-loki"
           },
           "expr": "{job=\"historian_events\"} | json | __error__=\"\" | event_type != \"grafana_latest\""
         }
@@ -2170,7 +2170,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
+        "uid": "loki"
       },
       "options": {
         "dedupStrategy": "none",
@@ -2186,9 +2186,9 @@
           "refId": "A",
           "datasource": {
             "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "uid": "loki"
           },
-          "expr": "{job=\"scada_l2_audit\"} | json | __error__=\"\" | event_type =~ \"SCADA_READ|RECON_PROBE\""
+          "expr": "{job=\"ews_pera_audit\"} | json | __error__=\"\" | event_type =~ \"SCADA_READ|RECON_PROBE\""
         }
       ]
     }
